@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Volume2, Sparkles, BookOpen, Check, Bookmark, Globe, Edit3, Save } from 'lucide-react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { DictionaryWord, DialectType, GenderType } from '../types';
 import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
 import { getStoredNotes, saveWordNote } from '../lib/offlineStorage';
@@ -37,6 +38,45 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
   useEffect(() => {
     setModalAccent(activeDialect);
   }, [activeDialect]);
+
+  // Handle hardware Back button, Escape key, and History popstate for closing modal
+  useEffect(() => {
+    if (!wordObj) return;
+
+    // Push dummy history state so browser/mobile back gesture closes modal smoothly
+    window.history.pushState({ modalOpen: true }, '');
+
+    const handlePopState = () => {
+      onClose();
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Capacitor hardware back button handler
+    let backListener: any = null;
+    CapacitorApp.addListener('backButton', () => {
+      onClose();
+    }).then((listener) => {
+      backListener = listener;
+    }).catch(() => {
+      // not running in native Capacitor
+    });
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (backListener && typeof backListener.remove === 'function') {
+        backListener.remove();
+      }
+    };
+  }, [wordObj, onClose]);
 
   useEffect(() => {
     if (wordObj) {
@@ -100,12 +140,18 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
   if (!wordObj) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 relative">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 top-0 bottom-0 left-0 right-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto w-screen max-w-full animate-in fade-in"
+    >
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6 relative my-auto">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-5 left-5 p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-full bg-slate-100 dark:bg-slate-800 transition-colors"
+          aria-label="بستن"
+          className="absolute top-4 left-4 sm:top-5 sm:left-5 p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-full bg-slate-100 dark:bg-slate-800 transition-colors z-10"
         >
           <X className="w-5 h-5" />
         </button>

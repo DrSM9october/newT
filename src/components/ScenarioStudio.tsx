@@ -12,6 +12,7 @@ import {
   Mic,
   MicOff
 } from 'lucide-react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { PRACTICAL_SCENARIOS } from '../data/scenariosData';
 import { ChatMessage, DifficultyLevel, RoleplayScenario, DialectType, GenderType } from '../types';
 import {
@@ -49,6 +50,35 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
       setSelectedAccent(activeDialect);
     }
   }, [activeScenario, activeDialect]);
+
+  // Handle mobile hardware back button when inside an active scenario
+  useEffect(() => {
+    if (!activeScenario) return;
+
+    window.history.pushState({ scenarioActive: true }, '');
+
+    const handlePopState = () => {
+      setActiveScenario(null);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    let backListener: any = null;
+    CapacitorApp.addListener('backButton', () => {
+      setActiveScenario(null);
+    }).then((listener) => {
+      backListener = listener;
+    }).catch(() => {
+      // ignore non-native
+    });
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (backListener && typeof backListener.remove === 'function') {
+        backListener.remove();
+      }
+    };
+  }, [activeScenario]);
 
   const startScenario = (sc: RoleplayScenario) => {
     setActiveScenario(sc);

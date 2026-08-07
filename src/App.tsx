@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { Header } from './components/Header';
 import { NetworkStatusBanner } from './components/NetworkStatusBanner';
 import { AiChatStudio } from './components/AiChatStudio';
@@ -15,6 +16,35 @@ export default function App() {
   const [userGender, setUserGender] = useState<GenderType>('masculine');
   const [darkMode, setDarkMode] = useState<boolean>(false);
   const [forcedOfflineMode, setForcedOfflineMode] = useState<boolean>(false);
+
+  // Handle mobile Back Button navigation across tabs
+  useEffect(() => {
+    if (activeTab === 'chat') return;
+
+    window.history.pushState({ tab: activeTab }, '');
+
+    const handlePopState = () => {
+      setActiveTab('chat');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    let backListener: any = null;
+    CapacitorApp.addListener('backButton', () => {
+      setActiveTab('chat');
+    }).then((listener) => {
+      backListener = listener;
+    }).catch(() => {
+      // non-native
+    });
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (backListener && typeof backListener.remove === 'function') {
+        backListener.remove();
+      }
+    };
+  }, [activeTab]);
 
   // User progress state with localStorage backup
   const [progress, setProgress] = useState<UserProgress>(() => {

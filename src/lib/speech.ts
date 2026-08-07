@@ -9,47 +9,162 @@ export const ACCENT_CONFIGS: { code: SupportedAccent; labelFa: string; labelEn: 
   { code: 'ar-LB', labelFa: 'لبنانی (Lebanese)', labelEn: 'Lebanese Dialect', flag: '🇱🇧' },
 ];
 
+// Global utterance reference to prevent Android Chrome Garbage Collection bug
+let activeUtterance: SpeechSynthesisUtterance | null = null;
+let activeAudioFallback: HTMLAudioElement | null = null;
+
 export function speakEnglishText(
   text: string,
   rate: number = 1.0,
   accent: SupportedAccent = 'en-US'
 ): Promise<void> {
   return new Promise((resolve) => {
-    if (!('speechSynthesis' in window)) {
-      console.warn('Speech synthesis not supported in this browser environment.');
+    if (!text || !text.trim()) {
       resolve();
       return;
     }
 
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    
-    // Set appropriate lang code
+    const cleanText = text.trim();
     let langCode: string = accent;
     if (accent === 'ar-IQ' || accent === 'ar-LB') {
-      langCode = 'ar-SA'; // Standard Arabic TTS voice fallback for Arabic dialects
-    }
-    utterance.lang = langCode;
-    utterance.rate = rate;
-
-    // Pick appropriate voice matching accent code or language prefix
-    const voices = window.speechSynthesis.getVoices();
-    const prefix = accent.slice(0, 2); // 'en' or 'ar'
-    const exactVoice = voices.find((v) => v.lang === accent || v.lang.replace('_', '-') === accent);
-    const langVoice = voices.find((v) => v.lang.startsWith(prefix));
-    
-    if (exactVoice) {
-      utterance.voice = exactVoice;
-    } else if (langVoice) {
-      utterance.voice = langVoice;
+      langCode = 'ar-SA';
     }
 
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
+    // Stop any existing fallback audio
+    if (activeAudioFallback) {
+      try {
+        activeAudioFallback.pause();
+        activeAudioFallback = null;
+      } catch (e) {
+        // ignore
+      }
+    }
 
-    window.speechSynthesis.speak(utterance);
+    // Helper for HTML5 Audio Fallback
+    const playAudioFallback = () => {
+      try {
+        const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(
+          langCode
+        )}&q=${encodeURIComponent(cleanText)}`;
+        const audio = new Audio(audioUrl);
+        audio.playbackRate = rate;
+        activeAudioFallback = audio;
+        audio.onended = () => {
+          activeAudioFallback = null;
+          resolve();
+        };
+        audio.onerror = () => {
+          activeAudioFallback = null;
+          // Web Audio API Beep Fallback if all else fails
+          playAudioToneFallback();
+          resolve();
+        };
+        audio.play().catch(() => {
+          playAudioToneFallback();
+          resolve();
+        });
+      } catch (err) {
+        playAudioToneFallback();
+        resolve();
+      }
+    };
+
+    // Helper Web Audio API tone feedback fallback
+    const playAudioToneFallback = () => {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 note
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    // Try Native SpeechSynthesis first
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+        
+        // Force unlock/resume audio state on Android Chrome
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = langCode;
+        utterance.rate = rate;
+
+        // Keep reference on global object to prevent GC
+        activeUtterance = utterance;
+        (window as any)._activeUtteranceRef = utterance;
+
+        const voices = window.speechSynthesis.getVoices();
+        const prefix = accent.slice(0, 2); // 'en' or 'ar'
+        const exactVoice = voices.find((v) => v.lang === accent || v.lang.replace('_', '-') === accent);
+        const langVoice = voices.find((v) => v.lang.startsWith(prefix));
+
+        if (exactVoice) {
+          utterance.voice = exactVoice;
+        } else if (langVoice) {
+          utterance.voice = langVoice;
+        }
+
+        let hasResolved = false;
+        const safeResolve = () => {
+          if (!hasResolved) {
+            hasResolved = true;
+            activeUtterance = null;
+            (window as any)._activeUtteranceRef = null;
+            resolve();
+          }
+        };
+
+        // Speech timeout fallback in case Android WebView speech gets stuck
+        const timeoutId = setTimeout(() => {
+          if (!hasResolved) {
+            console.warn('Speech synthesis timeout, switching to audio fallback.');
+            window.speechSynthesis.cancel();
+            playAudioFallback();
+          }
+        }, Math.max(2500, cleanText.length * 200));
+
+        utterance.onend = () => {
+          clearTimeout(timeoutId);
+          safeResolve();
+        };
+
+        utterance.onerror = (evt) => {
+          clearTimeout(timeoutId);
+          console.warn('Speech synthesis error:', evt);
+          playAudioFallback();
+        };
+
+        window.speechSynthesis.speak(utterance);
+
+        // Chrome Android work-around for speech getting stuck in long sentences
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.resume();
+        }
+        return;
+      } catch (e) {
+        console.warn('Speech synthesis threw exception, using audio fallback', e);
+        playAudioFallback();
+        return;
+      }
+    }
+
+    // If SpeechSynthesis unavailable
+    playAudioFallback();
   });
 }
 

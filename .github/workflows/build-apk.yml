@@ -55,15 +55,33 @@ jobs:
       - name: Grant Execute Permission for Gradle Wrapper
         run: chmod +x android/gradlew
 
-      - name: Build Debug APK
+      - name: Build Debug & Release APKs
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug assembleRelease --no-daemon --stacktrace
 
-      - name: Build Unsigned Release APK
+      - name: Generate Release Keystore and Sign Release APK
         run: |
-          cd android
-          ./gradlew assembleRelease --no-daemon --stacktrace || true
+          if [ -f "android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+            echo "Generating LinguaAI Release Keystore..."
+            keytool -genkey -v -keystore linguaai-release.keystore \
+              -alias linguaai \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass linguaaipass \
+              -keypass linguaaipass \
+              -dname "CN=LinguaAI, OU=Mobile, O=LinguaAI App, L=Tehran, C=IR"
+
+            echo "Signing APK with jarsigner..."
+            jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+              -keystore linguaai-release.keystore \
+              -storepass linguaaipass \
+              -keypass linguaaipass \
+              android/app/build/outputs/apk/release/app-release-unsigned.apk linguaai
+
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk android/app/build/outputs/apk/release/LinguaAI-v1.0.0-Signed.apk
+          fi
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
@@ -72,10 +90,10 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      - name: Upload Release APK Artifact (if available)
+      - name: Upload Signed Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LinguaAI-Release-Unsigned-APK
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: LinguaAI-v1.0.0-Signed-Release-APK
+          path: android/app/build/outputs/apk/release/LinguaAI-v1.0.0-Signed.apk
           if-no-files-found: ignore
           retention-days: 30
