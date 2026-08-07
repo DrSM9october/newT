@@ -35,13 +35,13 @@ export interface LanguageAIProvider {
 export class GeminiProvider implements LanguageAIProvider {
   public async analyzeText(req: AnalysisRequest): Promise<LanguageAnalysisResult> {
     try {
-      const response = await fetch('/api/explain-word', {
+      const response = await fetch('/api/dictionary-explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           word: req.text,
           dialect: req.dialect || 'en-US',
-          gender: req.gender || 'masculine',
+          userGender: req.gender || 'masculine',
         }),
       });
 
@@ -71,8 +71,8 @@ export class GeminiProvider implements LanguageAIProvider {
         history: req.history,
         personaId: req.personaId,
         dialect: req.dialect,
-        gender: req.gender,
-        level: req.level,
+        userGender: req.gender,
+        userLevel: req.level,
       }),
     });
 
@@ -85,10 +85,22 @@ export class GeminiProvider implements LanguageAIProvider {
       throw new Error(data.error || 'Server error');
     }
 
+    const payload = data.data || data;
+
     return {
-      replyEn: data.replyEn,
-      replyFa: data.replyFa,
-      feedback: data.feedback,
+      replyEn: payload.replyEn || '',
+      replyFa: payload.replyFa || '',
+      feedback: {
+        grammarScore: payload.grammarScore ?? 90,
+        correctedSentence: payload.correctedSentence || undefined,
+        explanationFa: payload.explanationFa || undefined,
+        genderNoteFa: payload.genderNoteFa || undefined,
+        betterAlternatives: payload.betterAlternatives || [],
+        vocabularyTips: payload.vocabHighlights
+          ? payload.vocabHighlights.map((v: any) => `${v.word}: ${v.meaningFa}`)
+          : [],
+        persianTranslation: payload.replyFa || '',
+      },
       providerUsed: 'gemini_cloud',
     };
   }

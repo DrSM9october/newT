@@ -128,7 +128,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased transition-colors dir-rtl selection:bg-teal-500 selection:text-white">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased transition-colors dir-rtl selection:bg-teal-500 selection:text-white relative">
       {/* Header */}
       <Header
         activeTab={activeTab}

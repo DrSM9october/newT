@@ -229,5 +229,65 @@ export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
       { en: "يسلمو ايديك، الكافيه بياخد العقل! (Yislamo ideik)", fa: "دستت درد نکنه، کافه عجیبه و فوق‌العاده‌ست!", gender: "unisex" },
     ],
     keyVocab: ['كيفك', 'شو اخبارك', 'بدي', 'هلق', 'تكرم عينك', 'يسلمو ايديك'],
+  },
+  {
+    id: 'iraq_taxi_baghdad',
+    titleFa: 'تاکسی و جابه‌جایی شهری در بغداد',
+    titleEn: 'Baghdad Taxi & City Ride (Iraqi Arabic)',
+    descriptionFa: 'گفتگو با راننده تاکسی بغداد، دادن آدرس، توافق کرایه و تعارفات گرم عراقی 🇮🇶',
+    category: 'directions_transport',
+    level: 'A2',
+    dialect: 'ar-IQ',
+    icon: 'Navigation',
+    aiPersona: {
+      name: 'ابو حيدر (Abu Haidar)',
+      role: 'راننده تاکسی باتجربه و صمیمی بغداد',
+      avatar: '🚖',
+      systemPrompt:
+        'You are Abu Haidar, a friendly taxi driver in Baghdad, Iraq. Speak in authentic Iraqi Arabic dialect using terms like "يا هلا بالعالي", "تدلل عيني", "شكد تدفع؟", "وين تريد تروح؟", "هسا نوصل". Help the passenger reach their location in Baghdad while conversing nicely.',
+    },
+    objectives: [
+      { id: 'o1', titleFa: 'اعلام مقصد به راننده (اريد اروح لـ...)', titleEn: 'State destination to driver', completed: false },
+      { id: 'o2', titleFa: 'پرسیدن کرایه و چانه‌زنی (شكد الكراية؟)', titleEn: 'Inquire taxi fare in Iraqi', completed: false },
+      { id: 'o3', titleFa: 'درخواست پیاده شدن (هنا نزلني عيني)', titleEn: 'Request to stop/drop off', completed: false },
+    ],
+    starterMessage: "یا هلا بيك عيني! وين تريد تروح اليوم ببغداد؟ تدلل هسا نوصلك.",
+    usefulPhrases: [
+      { en: "اريد اروح لمنطقة الكرادة، شكد الكراية؟", fa: "می‌خوام برم منطقه كراده، کرایه‌ش چقدر میشه؟", gender: "unisex" },
+      { en: "سويلي مجال شويه عيني ابو حيدر.", fa: "یه کم باهام راه بیا عزیزم ابو حیدر.", gender: "unisex" },
+      { en: "هنا نزلني يم السيطرة من فضلك.", fa: "همینجا کنار بازرسی پیاده‌م کن لطفاً.", gender: "unisex" },
+      { en: "رحم الله والديك، عاشت ايدك!", fa: "خدا رفتگانت رو بیامرزه، دستت درد نکنه!", gender: "unisex" },
+    ],
+    keyVocab: ['اريد اروح', 'شكد الكراية', 'تدلل', 'هنا نزلني', 'رحم الله والديك', 'عاشت ايدك'],
+  },
+  {
+    id: 'lebanon_hotel_beirut',
+    titleFa: 'پذیرش هتل و تحویل اتاق در بیروت',
+    titleEn: 'Beirut Hotel Check-in (Lebanese Arabic)',
+    descriptionFa: 'تحویل اتاق هتل، گفتگو با پذیرش بیروت و درخواست خدمات به لهجه لبنانی 🇱🇧',
+    category: 'hotel_stay',
+    level: 'B1',
+    dialect: 'ar-LB',
+    icon: 'Bed',
+    aiPersona: {
+      name: 'ميرنا (Mirna)',
+      role: 'مدیر پذیرش خوش‌برخورد هتل بیروت',
+      avatar: '🏨',
+      systemPrompt:
+        'You are Mirna, receptionist at a boutique hotel in Beirut, Lebanon. You speak polite Lebanese Arabic dialect. Use expressions like "اهلاً وسهلاً بحضرتك", "تكرم عينك", "شو الاسم الكريم؟", "الاوضة جاهزة". Assist the guest with check-in, keycard, Wi-Fi, and breakfast instructions.',
+    },
+    objectives: [
+      { id: 'o1', titleFa: 'ارائه نام رزرو به لهجه لبنانی', titleEn: 'State booking name in Lebanese', completed: false },
+      { id: 'o2', titleFa: 'پرسیدن درباره رمزوای‌فای و صبحانه', titleEn: 'Ask about Wi-Fi & breakfast', completed: false },
+      { id: 'o3', titleFa: 'درخواست اتاق رو به دریا یا طبقات بالا', titleEn: 'Request room preference', completed: false },
+    ],
+    starterMessage: "مساء الخير واهلاً وسهلاً بك ببیروت! شو الاسم الكريم لحتى شوف الحجز؟",
+    usefulPhrases: [
+      { en: "مساء النور، عندي حجز باسم علي رضا.", fa: "عصر بخیر، رزروی به نام علی رضا دارم.", gender: "unisex" },
+      { en: "ممكن اوضة بتطل ع البحر اذا بتريد؟", fa: "امکانش هست یک اتاق رو به دریا باشه اگه لطف کنید؟", gender: "unisex" },
+      { en: "شو كلمة السر للـ Wi-Fi بالاوضة؟", fa: "رمز وای‌فای داخل اتاق چیه؟", gender: "unisex" },
+      { en: "ممنون كتير اليك، تكرم عينك!", fa: "خیلی ممنونم ازت، لطف کردی!", gender: "unisex" },
+    ],
+    keyVocab: ['حجز', 'اوضة', 'كلمة السر', 'بتطل ع البحر', 'بتريد', 'ممنون كتير'],
   }
 ];

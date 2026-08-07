@@ -42,6 +42,8 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
   const [loading, setLoading] = useState(false);
   const [completedObjectives, setCompletedObjectives] = useState<Record<string, boolean>>({});
   const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>(activeDialect);
+  const [filterDialect, setFilterDialect] = useState<'all' | 'english' | 'ar-IQ' | 'ar-LB'>('all');
+  const [showFeedbackModalId, setShowFeedbackModalId] = useState<string | null>(null);
 
   useEffect(() => {
     if (activeScenario?.dialect) {
@@ -50,6 +52,13 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
       setSelectedAccent(activeDialect);
     }
   }, [activeScenario, activeDialect]);
+
+  // Filter scenarios based on user selected filter
+  const filteredScenarios = PRACTICAL_SCENARIOS.filter((sc) => {
+    if (filterDialect === 'all') return true;
+    if (filterDialect === 'english') return !sc.dialect || sc.dialect.startsWith('en');
+    return sc.dialect === filterDialect;
+  });
 
   // Handle mobile hardware back button when inside an active scenario
   useEffect(() => {
@@ -143,8 +152,9 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
       setIsListening(false);
     }
 
+    const userMsgId = `sc_user_${Date.now()}`;
     const userMsg: ChatMessage = {
-      id: `sc_user_${Date.now()}`,
+      id: userMsgId,
       sender: 'user',
       text: textToSend,
       timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
@@ -171,18 +181,39 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
       const resData = await res.json();
       if (resData.success && resData.data) {
         const aiData = resData.data;
+
+        if (aiData.grammarScore) {
+          setScenarioMessages((prev) =>
+            prev.map((m) =>
+              m.id === userMsgId
+                ? {
+                    ...m,
+                    feedback: {
+                      grammarScore: aiData.grammarScore,
+                      correctedSentence: aiData.correctedSentence,
+                      explanationFa: aiData.explanationFa,
+                      genderNoteFa: aiData.genderNoteFa,
+                      betterAlternatives: aiData.betterAlternatives,
+                      persianTranslation: aiData.replyFa,
+                    },
+                  }
+                : m
+            )
+          );
+        }
+
         const aiMsg: ChatMessage = {
           id: `sc_ai_${Date.now()}`,
           sender: 'ai',
-          text: aiData.replyEn,
-          persianText: aiData.replyFa,
+          text: aiData.replyEn || '',
+          persianText: aiData.replyFa || '',
           timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
         };
 
         setScenarioMessages((prev) => [...prev, aiMsg]);
         speakEnglishText(aiMsg.text, 1.0, selectedAccent);
 
-        // Check objectives auto-completion simulation
+        // Check objectives auto-completion
         if (activeScenario.objectives.length > Object.keys(completedObjectives).length) {
           const nextObj = activeScenario.objectives.find((o) => !completedObjectives[o.id]);
           if (nextObj) {
@@ -220,15 +251,59 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
                 <Theater className="w-3.5 h-3.5" />
                 تمرین تعاملی نقش‌آفرینی (Interactive Roleplay)
               </span>
-              <h2 className="text-2xl font-black">سناریوهای روزمره و واقعی زبان انگلیسی</h2>
+              <h2 className="text-2xl font-black">سناریوهای روزمره انگلیسی و لهجه‌های محلی عربی</h2>
               <p className="text-xs md:text-sm text-slate-300 leading-relaxed">
-                در شرایط واقعی قرار بگیرید! از سفارش قهوه تا مصاحبه کاری و کنترل پاسپورت فرودگاه. با هم‌صحبت هوشمند مکالمه کنید و اهداف تعیین‌شده را کامل کنید.
+                در موقعیت‌های واقعی قرار بگیرید! از سفارش کافه و فرودگاه تا خرید در بازار بغداد 🇮🇶 و کافه‌نشینی بیروت 🇱🇧.
               </p>
             </div>
           </div>
 
+          {/* Dialect Filter Tabs */}
+          <div className="flex flex-wrap items-center gap-2 bg-slate-100 dark:bg-slate-900 p-2 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <button
+              onClick={() => setFilterDialect('all')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                filterDialect === 'all'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              همه سناریوها ({PRACTICAL_SCENARIOS.length})
+            </button>
+            <button
+              onClick={() => setFilterDialect('english')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                filterDialect === 'english'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              🇺🇸 🇬🇧 انگلیسی
+            </button>
+            <button
+              onClick={() => setFilterDialect('ar-IQ')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                filterDialect === 'ar-IQ'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              🇮🇶 لهجه محلی عراقی
+            </button>
+            <button
+              onClick={() => setFilterDialect('ar-LB')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                filterDialect === 'ar-LB'
+                  ? 'bg-red-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              🇱🇧 لهجه محلی لبنانی
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {PRACTICAL_SCENARIOS.map((sc) => (
+            {filteredScenarios.map((sc) => (
               <div
                 key={sc.id}
                 className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-indigo-500 transition-all flex flex-col justify-between group"
@@ -238,9 +313,21 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
                     <span className="text-3xl p-3 bg-indigo-50 dark:bg-indigo-950 rounded-2xl border border-indigo-100 dark:border-indigo-900">
                       {sc.aiPersona.avatar}
                     </span>
-                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold px-2.5 py-1 rounded-full">
-                      سطح {sc.level}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      {sc.dialect === 'ar-IQ' && (
+                        <span className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold px-2.5 py-1 rounded-full border border-emerald-300 dark:border-emerald-800">
+                          🇮🇶 عراقی
+                        </span>
+                      )}
+                      {sc.dialect === 'ar-LB' && (
+                        <span className="bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300 text-[11px] font-bold px-2.5 py-1 rounded-full border border-red-300 dark:border-red-800">
+                          🇱🇧 لبنانی
+                        </span>
+                      )}
+                      <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold px-2.5 py-1 rounded-full">
+                        سطح {sc.level}
+                      </span>
+                    </div>
                   </div>
 
                   <div>
@@ -282,7 +369,7 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
           <div className="lg:col-span-1 space-y-4">
             <button
               onClick={() => setActiveScenario(null)}
-              className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all"
+              className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <ArrowRight className="w-4 h-4" />
               <span>بازگشت به لیست سناریوها</span>
@@ -299,7 +386,7 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
                   <button
                     key={acc.code}
                     onClick={() => setSelectedAccent(acc.code)}
-                    className={`py-1 rounded-lg text-[11px] font-bold transition-all ${
+                    className={`py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                       selectedAccent === acc.code
                         ? 'bg-indigo-600 text-white shadow-xs'
                         : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -355,7 +442,7 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
                   <button
                     key={idx}
                     onClick={() => handleSendScenarioMsg(phrase.en)}
-                    className="w-full text-left bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 text-xs transition-all text-slate-800 dark:text-slate-200"
+                    className="w-full text-left bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 text-xs transition-all text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     <p className="font-sans font-bold">"{phrase.en}"</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">{phrase.fa}</p>
@@ -404,12 +491,34 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
                             {msg.persianText}
                           </p>
                         )}
+                        {isUser && msg.feedback && (
+                          <div className="mt-2 pt-2 border-t border-indigo-400/40 flex items-center justify-between text-xs text-indigo-100">
+                            <span>امتیاز گرامری: {msg.feedback.grammarScore}٪</span>
+                            <button
+                              onClick={() => setShowFeedbackModalId(showFeedbackModalId === msg.id ? null : msg.id)}
+                              className="bg-white/20 hover:bg-white/30 text-white font-bold px-2 py-0.5 rounded text-[10px]"
+                            >
+                              تحلیل
+                            </button>
+                          </div>
+                        )}
                       </div>
+
+                      {isUser && msg.feedback && showFeedbackModalId === msg.id && (
+                        <div className="bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs space-y-2 text-slate-800 dark:text-slate-200">
+                          {msg.feedback.correctedSentence && (
+                            <p><strong>اصلاح‌شده:</strong> "{msg.feedback.correctedSentence}"</p>
+                          )}
+                          {msg.feedback.explanationFa && (
+                            <p className="text-slate-600 dark:text-slate-300">💡 {msg.feedback.explanationFa}</p>
+                          )}
+                        </div>
+                      )}
 
                       {!isUser && (
                         <button
                           onClick={() => speakEnglishText(msg.text, 1.0, selectedAccent)}
-                          className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 p-1"
+                          className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 p-1 cursor-pointer"
                         >
                           <Volume2 className="w-3.5 h-3.5" />
                           <span>پخش صوت</span>

@@ -144,9 +144,9 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 top-0 bottom-0 left-0 right-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto w-screen max-w-full animate-in fade-in"
+      className="fixed inset-0 z-50 grid place-items-center p-2 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto w-full h-full animate-in fade-in"
     >
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6 relative my-auto">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl p-4 sm:p-6 relative my-auto">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -157,9 +157,9 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
         </button>
 
         {/* Word Header & Accent Controls */}
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-5 pt-1">
+          <div className="space-y-2 max-w-full">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-2xl font-black text-slate-900 dark:text-white font-sans">{wordObj.word}</h2>
               <span className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-0.5 rounded-full border border-indigo-300 dark:border-indigo-800">
                 {wordObj.level}
@@ -169,13 +169,13 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
               <span>US: {wordObj.phonetic}</span>
               {wordObj.phoneticUk && <span>| UK: {wordObj.phoneticUk}</span>}
             </div>
 
             {/* Accent Selector Buttons */}
-            <div className="flex items-center gap-1.5 pt-1">
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 max-w-full">
               <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
                 <Globe className="w-3.5 h-3.5 text-indigo-500" /> لهجه:
               </span>
@@ -200,7 +200,7 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
           </div>
 
           {/* Quick Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 mt-1 sm:mt-0">
             <button
               onClick={() => onToggleBookmark(wordObj.id)}
               className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
