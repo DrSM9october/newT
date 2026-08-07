@@ -1,0 +1,120 @@
+import { RoleplayScenario } from '../types';
+
+export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
+  {
+    id: 'cafe_order',
+    titleFa: 'سفارش قهوه و کیک در کافه آکسفورد',
+    titleEn: 'Ordering at Oxford Cafe',
+    descriptionFa: 'سفارش قهوه، درخواست شیر نباتی و پرداخت حساب با باریستا به زبان انگلیسی بریتانیایی 🇬🇧',
+    category: 'restaurant_cafe',
+    level: 'A2',
+    dialect: 'en-GB',
+    icon: 'Coffee',
+    aiPersona: {
+      name: 'Oliver (Barista)',
+      role: 'باریستای باحوصله کافه آکسفورد',
+      avatar: '☕',
+      systemPrompt: 'You are Oliver, a friendly barista at a cozy Oxford coffee shop. Speak polite British English using terms like "cheers", "lovely", "fancy anything else?". Help the user order drinks and pastries.',
+    },
+    objectives: [
+      { id: 'o1', titleFa: 'سفارش یک فنجان قهوه داغ', titleEn: 'Order a coffee', completed: false },
+      { id: 'o2', titleFa: 'درخواست تغییر شیر یا کم‌شکر بودن', titleEn: 'Customize order', completed: false },
+      { id: 'o3', titleFa: 'پرسیدن قیمت و پرداخت کارت/نقد', titleEn: 'Ask for total & pay', completed: false },
+    ],
+    starterMessage: "Good morning! Welcome to Oxford Roast. What can I get started for you today?",
+    usefulPhrases: [
+      { en: "I'd like an oat milk latte, please.", fa: "یک لاته با شیر جو دوسر می‌خواستم لطفاً.", gender: "unisex" },
+      { en: "Could I have a slice of carrot cake as well?", fa: "می‌تونم یک اسلایس کیک هویج هم داشته باشم؟", gender: "unisex" },
+      { en: "Do you take contactless payment?", fa: "پرداخت کارت اعتباری هم قبول می‌کنید؟", gender: "unisex" },
+    ],
+    keyVocab: ['latte', 'oat milk', 'takeaway', 'contactless', 'cheers'],
+  },
+  {
+    id: 'job_interview_tech',
+    titleFa: 'مصاحبه شغلی برنامه نویسی و هوش مصنوعی',
+    titleEn: 'Software Engineering Job Interview',
+    descriptionFa: 'معرفی تجربیات کاری، حل مسئله و پاسخ به سوالات منابع انسانی شرکت سیلیکون ولی 🇺🇸',
+    category: 'job_interview',
+    level: 'B2',
+    dialect: 'en-US',
+    icon: 'Briefcase',
+    aiPersona: {
+      name: 'Sarah (HR Manager)',
+      role: 'مدیر ارشد جذب استعداد شرکت فناوری',
+      avatar: '💼',
+      systemPrompt: 'You are Sarah, HR Talent Lead at a Silicon Valley tech company interviewing a candidate for a Software Engineering role. Ask insightful questions about past project challenges, teamwork, and technical problem-solving in American English.',
+    },
+    objectives: [
+      { id: 'o1', titleFa: 'معرفی کوتاه سابقه شغلی خود', titleEn: 'Introduce your background', completed: false },
+      { id: 'o2', titleFa: 'توضیح درباره بزرگ‌ترین چالش فنی پروژه', titleEn: 'Explain a technical challenge', completed: false },
+      { id: 'o3', titleFa: 'پرسیدن یک سوال هوشمندانه درباره فرهنگ شرکت', titleEn: 'Ask a question about culture', completed: false },
+    ],
+    starterMessage: "Hi! Thanks for joining today's interview. To start off, could you tell me a bit about your professional background?",
+    usefulPhrases: [
+      { en: "I have over four years of experience in full-stack development.", fa: "من بیش از چهار سال سابقه توسعه نرم‌افزار فول‌استک دارم.", gender: "unisex" },
+      { en: "One major challenge was optimizing database query response times.", fa: "یکی از چالش‌های اصلی بهینه‌سازی زمان پاسخگویی پایگاه‌داده بود.", gender: "unisex" },
+      { en: "What does the growth trajectory look like for this role?", fa: "مسیر رشد شغلی برای این موقعیت به چه صورت است؟", gender: "unisex" },
+    ],
+    keyVocab: ['background', 'full-stack', 'optimization', 'scalability', 'trajectory'],
+  },
+  {
+    id: 'iraq_taxi_baghdad',
+    titleFa: 'تاکسی و جابه‌جایی شهری در بغداد 🇮🇶',
+    titleEn: 'Baghdad Taxi Ride (Iraqi Arabic)',
+    descriptionFa: 'گفتگو با راننده تاکسی بغداد، دادن آدرس، توافق کرایه و تعارفات گرم عراقی 🇮🇶',
+    category: 'directions_transport',
+    level: 'A2',
+    dialect: 'ar-IQ',
+    icon: 'Navigation',
+    aiPersona: {
+      name: 'ابو حيدر (Abu Haidar)',
+      role: 'راننده تاکسی باتجربه و صمیمی بغداد',
+      avatar: '🚖',
+      systemPrompt:
+        'You are Abu Haidar, a friendly taxi driver in Baghdad, Iraq. Speak in authentic Iraqi Arabic dialect using terms like "يا هلا بالعالي", "تدلل عيني", "شكد تدفع؟", "وين تريد تروح؟", "هسا نوصل". Help the passenger reach their location in Baghdad while conversing nicely.',
+    },
+    objectives: [
+      { id: 'o1', titleFa: 'اعلام مقصد به راننده (اريد اروح لـ...)', titleEn: 'State destination to driver', completed: false },
+      { id: 'o2', titleFa: 'پرسیدن کرایه و چانه‌زنی (شكد الكراية؟)', titleEn: 'Inquire taxi fare in Iraqi', completed: false },
+      { id: 'o3', titleFa: 'درخواست پیاده شدن (هنا نزلني عيني)', titleEn: 'Request to stop/drop off', completed: false },
+    ],
+    starterMessage: "یا هلا بيك عيني! وين تريد تروح اليوم ببغداد؟ تدلل هسا نوصلك.",
+    usefulPhrases: [
+      { en: "اريد اروح لمنطقة الكرادة، شكد الكراية؟", fa: "می‌خوام برم منطقه كراده، کرایه‌ش چقدر میشه؟", gender: "unisex" },
+      { en: "سويلي مجال شويه عيني ابو حيدر.", fa: "یه کم باهام راه بیا عزیزم ابو حیدر.", gender: "unisex" },
+      { en: "هنا نزلني يم السيطرة من فضلك.", fa: "همینجا کنار بازرسی پیاده‌م کن لطفاً.", gender: "unisex" },
+      { en: "رحم الله والديك، عاشت ايدك!", fa: "خدا رفتگانت رو بیامرزه، دستت درد نکنه!", gender: "unisex" },
+    ],
+    keyVocab: ['اريد اروح', 'شكد الكراية', 'تدلل', 'هنا نزلني', 'رحم الله والديك', 'عاشت ايدك'],
+  },
+  {
+    id: 'lebanon_hotel_beirut',
+    titleFa: 'پذیرش هتل و تحویل اتاق در بیروت 🇱🇧',
+    titleEn: 'Beirut Hotel Check-in (Lebanese Arabic)',
+    descriptionFa: 'تحویل اتاق هتل، گفتگو با پذیرش بیروت و درخواست خدمات به لهجه لبنانی 🇱🇧',
+    category: 'hotel_stay',
+    level: 'B1',
+    dialect: 'ar-LB',
+    icon: 'Bed',
+    aiPersona: {
+      name: 'ميرنا (Mirna)',
+      role: 'مدیر پذیرش خوش‌برخورد هتل بیروت',
+      avatar: '🏨',
+      systemPrompt:
+        'You are Mirna, receptionist at a boutique hotel in Beirut, Lebanon. You speak polite Lebanese Arabic dialect. Use expressions like "اهلاً وسهلاً بحضرتك", "تكرم عينك", "شو الاسم الكريم؟", "الاوضة جاهزة". Assist the guest with check-in, keycard, Wi-Fi, and breakfast instructions.',
+    },
+    objectives: [
+      { id: 'o1', titleFa: 'ارائه نام رزرو به لهجه لبنانی', titleEn: 'State booking name in Lebanese', completed: false },
+      { id: 'o2', titleFa: 'پرسیدن درباره رمزوای‌فای و صبحانه', titleEn: 'Ask about Wi-Fi & breakfast', completed: false },
+      { id: 'o3', titleFa: 'درخواست اتاق رو به دریا یا طبقات بالا', titleEn: 'Request room preference', completed: false },
+    ],
+    starterMessage: "مساء الخير واهلاً وسهلاً بك ببیروت! شو الاسم الكريم لحتى شوف الحجز؟",
+    usefulPhrases: [
+      { en: "مساء النور، عندي حجز باسم علي رضا.", fa: "عصر بخیر، رزروی به نام علی رضا دارم.", gender: "unisex" },
+      { en: "ممكن اوضة بتطل ع البحر اذا بتريد؟", fa: "امکانش هست یک اتاق رو به دریا باشه اگه لطف کنید؟", gender: "unisex" },
+      { en: "شو كلمة السر للـ Wi-Fi بالاوضة؟", fa: "رمز وای‌فای داخل اتاق چیه؟", gender: "unisex" },
+      { en: "ممنون كتير اليك، تكرم عينك!", fa: "خیلی ممنونم ازت، لطف کردی!", gender: "unisex" },
+    ],
+    keyVocab: ['حجز', 'اوضة', 'كلمة السر', 'بتطل ع البحر', 'بتريد', 'ممنون كتير'],
+  }
+];

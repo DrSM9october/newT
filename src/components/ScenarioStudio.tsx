@@ -1,0 +1,400 @@
+import React, { useState, useEffect } from 'react';
+import { Theater, CheckCircle2, ArrowRight, Volume2, Mic, MicOff, Send, MessageSquare, Award, Sparkles, Navigation, Bed, Coffee, Briefcase } from 'lucide-react';
+import { RoleplayScenario, ChatMessage, DialectType } from '../types';
+import { PRACTICAL_SCENARIOS } from '../data/scenariosData';
+import { aiManager } from '../core/AIManager';
+import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
+
+interface ScenarioStudioProps {
+  activeDialect: DialectType;
+}
+
+export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({ activeDialect }) => {
+  const [activeScenario, setActiveScenario] = useState<RoleplayScenario | null>(null);
+  const [scenarioMessages, setScenarioMessages] = useState<ChatMessage[]>([]);
+  const [inputVal, setInputVal] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [completedObjectives, setCompletedObjectives] = useState<Record<string, boolean>>({});
+  const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>(activeDialect as SupportedAccent);
+  const [filterDialect, setFilterDialect] = useState<'all' | 'english' | 'ar-IQ' | 'ar-LB'>('all');
+  const [showFeedbackModalId, setShowFeedbackModalId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeScenario?.dialect) {
+      setSelectedAccent(activeScenario.dialect as SupportedAccent);
+    } else {
+      setSelectedAccent(activeDialect as SupportedAccent);
+    }
+  }, [activeScenario, activeDialect]);
+
+  const filteredScenarios = PRACTICAL_SCENARIOS.filter((sc) => {
+    if (filterDialect === 'all') return true;
+    if (filterDialect === 'english') return !sc.dialect || sc.dialect.startsWith('en');
+    return sc.dialect === filterDialect;
+  });
+
+  const handleStartScenario = (scenario: RoleplayScenario) => {
+    setActiveScenario(scenario);
+    setCompletedObjectives({});
+    setShowFeedbackModalId(null);
+
+    const initialMsg: ChatMessage = {
+      id: `sc_ai_${Date.now()}`,
+      sender: 'ai',
+      text: scenario.starterMessage,
+      timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setScenarioMessages([initialMsg]);
+    speakEnglishText(initialMsg.text, 1.0, (scenario.dialect || activeDialect) as SupportedAccent);
+  };
+
+  const handleSendScenarioMsg = async (textOverride?: string) => {
+    const textToSend = textOverride || inputVal;
+    if (!textToSend.trim() || loading || !activeScenario) return;
+
+    const userMsgId = `sc_usr_${Date.now()}`;
+    const userMsg: ChatMessage = {
+      id: userMsgId,
+      sender: 'user',
+      text: textToSend.trim(),
+      timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setScenarioMessages((prev) => [...prev, userMsg]);
+    if (!textOverride) setInputVal('');
+    setLoading(true);
+
+    try {
+      const resData = await aiManager.sendScenarioMessage({
+        userText: textToSend.trim(),
+        history: scenarioMessages.slice(-6),
+        persona: activeScenario.aiPersona,
+        dialect: (activeScenario.dialect || selectedAccent) as DialectType,
+      });
+
+      if (resData) {
+        if (resData.grammarScore) {
+          setScenarioMessages((prev) =>
+            prev.map((m) =>
+              m.id === userMsgId
+                ? {
+                    ...m,
+                    feedback: {
+                      grammarScore: resData.grammarScore,
+                      correctedSentence: resData.correctedSentence,
+                      explanationFa: resData.explanationFa,
+                      betterAlternatives: resData.betterAlternatives,
+                      persianTranslation: resData.replyFa,
+                    },
+                  }
+                : m
+            )
+          );
+        }
+
+        const aiMsg: ChatMessage = {
+          id: `sc_ai_${Date.now()}`,
+          sender: 'ai',
+          text: resData.replyEn || 'Very well!',
+          persianText: resData.replyFa || 'بسیار عالی!',
+          timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        setScenarioMessages((prev) => [...prev, aiMsg]);
+        speakEnglishText(aiMsg.text, 1.0, (activeScenario.dialect || selectedAccent) as SupportedAccent);
+
+        // Auto objective completion check
+        const nextObj = activeScenario.objectives.find((o) => !completedObjectives[o.id]);
+        if (nextObj) {
+          setCompletedObjectives((prev) => ({ ...prev, [nextObj.id]: true }));
+        }
+      }
+    } catch (e) {
+      console.error('Scenario msg error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+      {!activeScenario ? (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-indigo-900/60 via-purple-900/40 to-slate-900 border border-indigo-500/30 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="space-y-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                <Theater className="w-3.5 h-3.5" />
+                تمرین تعاملی نقش‌آفرینی (Interactive Roleplay)
+              </span>
+              <h2 className="text-2xl font-black text-white">سناریوهای کاربردی انگلیسی و لهجه‌های محلی عربی</h2>
+              <p className="text-xs md:text-sm text-slate-300 leading-relaxed max-w-2xl">
+                در موقعیت‌های واقعی قرار بگیرید! از سفارش کافه و فرودگاه تا تاکسی بغداد 🇮🇶 و تحویل هتل بیروت 🇱🇧.
+              </p>
+            </div>
+          </div>
+
+          {/* Dialect Filter Tabs */}
+          <div className="flex flex-wrap items-center gap-2 bg-slate-900 p-2 rounded-2xl border border-slate-800">
+            <button
+              onClick={() => setFilterDialect('all')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                filterDialect === 'all'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              همه سناریوها ({PRACTICAL_SCENARIOS.length})
+            </button>
+            <button
+              onClick={() => setFilterDialect('english')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                filterDialect === 'english'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🇺🇸 🇬🇧 انگلیسی
+            </button>
+            <button
+              onClick={() => setFilterDialect('ar-IQ')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                filterDialect === 'ar-IQ'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🇮🇶 لهجه محلی عراقی
+            </button>
+            <button
+              onClick={() => setFilterDialect('ar-LB')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                filterDialect === 'ar-LB'
+                  ? 'bg-red-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🇱🇧 لهجه محلی لبنانی
+            </button>
+          </div>
+
+          {/* Scenarios Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredScenarios.map((sc) => (
+              <div
+                key={sc.id}
+                className="bg-slate-900 rounded-3xl p-6 border border-slate-800 hover:border-indigo-500/50 transition-all flex flex-col justify-between space-y-4 group"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-3xl p-3 bg-slate-800 rounded-2xl border border-slate-700/60">
+                      {sc.aiPersona.avatar}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {sc.dialect === 'ar-IQ' && (
+                        <span className="bg-emerald-950/80 text-emerald-300 text-[11px] font-bold px-2.5 py-1 rounded-full border border-emerald-800">
+                          🇮🇶 عراقی
+                        </span>
+                      )}
+                      {sc.dialect === 'ar-LB' && (
+                        <span className="bg-red-950/80 text-red-300 text-[11px] font-bold px-2.5 py-1 rounded-full border border-red-800">
+                          🇱🇧 لبنانی
+                        </span>
+                      )}
+                      <span className="bg-slate-800 text-slate-300 text-xs font-bold px-2.5 py-1 rounded-full">
+                        سطح {sc.level}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-base font-black text-white group-hover:text-indigo-300 transition-colors">
+                      {sc.titleFa}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">{sc.titleEn}</p>
+                  </div>
+
+                  <p className="text-xs text-slate-300 leading-relaxed">{sc.descriptionFa}</p>
+                </div>
+
+                <button
+                  onClick={() => handleStartScenario(sc)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20 cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>شروع مکالمه و نقش‌آفرینی</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Active Roleplay Session View */
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Sidebar Info */}
+          <div className="lg:col-span-1 space-y-4">
+            <button
+              onClick={() => setActiveScenario(null)}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4" />
+              <span>بازگشت به لیست سناریوها</span>
+            </button>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4">
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+                <span className="text-3xl p-2 bg-slate-800 rounded-2xl">{activeScenario.aiPersona.avatar}</span>
+                <div>
+                  <h3 className="text-sm font-black text-white">{activeScenario.aiPersona.name}</h3>
+                  <p className="text-xs text-slate-400">{activeScenario.aiPersona.role}</p>
+                </div>
+              </div>
+
+              {/* Objectives List */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-black text-slate-300 flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-indigo-400" />
+                  <span>اهداف این سناریو:</span>
+                </h4>
+                <div className="space-y-1.5">
+                  {activeScenario.objectives.map((obj) => (
+                    <div
+                      key={obj.id}
+                      className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 transition-all ${
+                        completedObjectives[obj.id]
+                          ? 'bg-emerald-950/40 border-emerald-600/40 text-emerald-200'
+                          : 'bg-slate-950 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <CheckCircle2
+                        className={`w-4 h-4 ${
+                          completedObjectives[obj.id] ? 'text-emerald-400' : 'text-slate-600'
+                        }`}
+                      />
+                      <span>{obj.titleFa}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Useful Phrases */}
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <h4 className="text-xs font-black text-slate-300">جملات پیشنهادی کلیدی:</h4>
+                <div className="space-y-1.5">
+                  {activeScenario.usefulPhrases.map((phrase, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSendScenarioMsg(phrase.en)}
+                      className="w-full text-right bg-slate-950 p-2.5 rounded-xl border border-slate-800 hover:border-indigo-500 text-xs transition-all text-slate-200 cursor-pointer"
+                    >
+                      <p className="font-sans font-bold" dir="ltr">"{phrase.en}"</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{phrase.fa}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Chat Window */}
+          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-4 flex flex-col h-[600px]">
+            <div className="flex-1 overflow-y-auto space-y-4 p-2">
+              {scenarioMessages.map((msg) => {
+                const isUser = msg.sender === 'user';
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col space-y-1.5 ${isUser ? 'items-end' : 'items-start'}`}
+                  >
+                    <div
+                      className={`max-w-[85%] p-4 rounded-3xl text-sm leading-relaxed ${
+                        isUser
+                          ? 'bg-indigo-600 text-white rounded-br-none'
+                          : 'bg-slate-800 text-slate-100 rounded-bl-none border border-slate-700/60'
+                      }`}
+                    >
+                      <p className="font-sans font-medium">{msg.text}</p>
+                      {msg.persianText && (
+                        <p className="text-xs text-slate-300 pt-2 mt-2 border-t border-slate-700/50">
+                          {msg.persianText}
+                        </p>
+                      )}
+
+                      {/* Grammar Analysis Option */}
+                      {isUser && msg.feedback && (
+                        <div className="mt-2 pt-2 border-t border-indigo-400/40 flex items-center justify-between text-xs text-indigo-100">
+                          <span>امتیاز گرامری: {msg.feedback.grammarScore}٪</span>
+                          <button
+                            onClick={() =>
+                              setShowFeedbackModalId(
+                                showFeedbackModalId === msg.id ? null : msg.id
+                              )
+                            }
+                            className="bg-white/20 hover:bg-white/30 text-white font-bold px-2 py-0.5 rounded text-[10px] cursor-pointer"
+                          >
+                            تحلیل
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {isUser && msg.feedback && showFeedbackModalId === msg.id && (
+                      <div className="max-w-[85%] bg-amber-950/80 border border-amber-800 rounded-xl p-3 text-xs space-y-1.5 text-amber-200">
+                        {msg.feedback.correctedSentence && (
+                          <p>
+                            <strong>اصلاح‌شده:</strong> "{msg.feedback.correctedSentence}"
+                          </p>
+                        )}
+                        {msg.feedback.explanationFa && (
+                          <p className="text-amber-300">💡 {msg.feedback.explanationFa}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {!isUser && (
+                      <button
+                        onClick={() =>
+                          speakEnglishText(
+                            msg.text,
+                            1.0,
+                            (activeScenario.dialect || selectedAccent) as SupportedAccent
+                          )
+                        }
+                        className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 p-1 cursor-pointer"
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                        <span>پخش صوت</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Input Box */}
+            <div className="pt-3 border-t border-slate-800 flex items-center gap-2">
+              <input
+                type="text"
+                value={inputVal}
+                onChange={(e) => setInputVal(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendScenarioMsg()}
+                placeholder="پاسخ خود را بنویسید..."
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-slate-100 focus:outline-none"
+                dir="ltr"
+              />
+              <button
+                onClick={() => handleSendScenarioMsg()}
+                disabled={!inputVal.trim() || loading}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold p-3 rounded-2xl transition-all cursor-pointer"
+              >
+                <Send className="w-5 h-5 rotate-180" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
