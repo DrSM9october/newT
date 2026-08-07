@@ -11,7 +11,8 @@ import {
   Sun,
   Moon,
   Globe,
-  UserCheck
+  UserCheck,
+  Search
 } from 'lucide-react';
 import { DifficultyLevel, DialectType, GenderType } from '../types';
 import { TOTAL_DICTIONARY_STATS } from '../data/dictionaryData';
@@ -187,8 +188,17 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </nav>
 
-          {/* Level Switcher & Theme Toggle */}
+          {/* Level Switcher, Search Shortcut & Theme Toggle */}
           <div className="flex items-center space-x-2 space-x-reverse">
+            <button
+              onClick={() => setActiveTab('dictionary')}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 font-bold text-xs border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer"
+              title="جستجوی هوشمند کلمات و لهجه‌ها"
+            >
+              <Search className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>جستجوی دیکشنری</span>
+            </button>
+
             <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
               <span className="text-xs text-slate-500 dark:text-slate-400 px-2 font-bold hidden sm:inline">سطح:</span>
               <div className="flex items-center gap-0.5">

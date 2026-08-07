@@ -10,7 +10,8 @@ import {
   ChevronLeft,
   Globe,
   SlidersHorizontal,
-  Layers
+  Layers,
+  X
 } from 'lucide-react';
 import {
   DICTIONARY_CATEGORIES,
@@ -20,6 +21,7 @@ import {
 } from '../data/dictionaryData';
 import { CategoryType, DictionaryWord, DifficultyLevel, DialectType, GenderType } from '../types';
 import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
+import { searchDictionaryWords, normalizeText } from '../lib/searchEngine';
 import { WordDetailModal } from './WordDetailModal';
 
 interface DictionaryViewProps {
@@ -44,39 +46,61 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType | 'all'>('all');
   const [selectedLevel, setSelectedLevel] = useState<DifficultyLevel | 'all'>('all');
+  const [selectedAccentFilter, setSelectedAccentFilter] = useState<string>('all');
   const [onlyBookmarked, setOnlyBookmarked] = useState(false);
   const [selectedWordObj, setSelectedWordObj] = useState<DictionaryWord | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<'words' | 'sentences'>('words');
   const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>(activeDialect);
 
-  // Filter dictionary words
+  // High Quality Multi-field Search across all words and accents
   const filteredWords = useMemo(() => {
-    return OFFLINE_WORDS_DATABASE.filter((w) => {
-      const matchSearch =
-        w.word.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        w.persianMeaning.includes(searchQuery) ||
-        w.definitionEn.toLowerCase().includes(searchQuery.toLowerCase());
+    return searchDictionaryWords(
+      searchQuery,
+      selectedCategory,
+      selectedLevel,
+      selectedAccentFilter,
+      onlyBookmarked,
+      bookmarkedIds,
+      OFFLINE_WORDS_DATABASE
+    );
+  }, [
+    searchQuery,
+    selectedCategory,
+    selectedLevel,
+    selectedAccentFilter,
+    onlyBookmarked,
+    bookmarkedIds,
+  ]);
 
-      const matchCategory = selectedCategory === 'all' || w.category === selectedCategory;
-      const matchLevel = selectedLevel === 'all' || w.level === selectedLevel;
-      const matchBookmark = !onlyBookmarked || bookmarkedIds.includes(w.id);
-
-      return matchSearch && matchCategory && matchLevel && matchBookmark;
-    });
-  }, [searchQuery, selectedCategory, selectedLevel, onlyBookmarked, bookmarkedIds]);
-
-  // Filter practice sentences
+  // Normalized Search for practice sentences
   const filteredSentences = useMemo(() => {
+    const normQ = normalizeText(searchQuery);
     return EVERYDAY_PRACTICE_SENTENCES.filter((s) => {
       const matchSearch =
-        s.en.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.fa.includes(searchQuery);
+        !normQ ||
+        normalizeText(s.en).includes(normQ) ||
+        normalizeText(s.fa).includes(normQ) ||
+        (s.dialect && normalizeText(s.dialect).includes(normQ));
+
       const matchCategory = selectedCategory === 'all' || s.category === selectedCategory;
       const matchLevel = selectedLevel === 'all' || s.level === selectedLevel;
+      const matchAccent =
+        selectedAccentFilter === 'all' || (s.dialect && s.dialect === selectedAccentFilter);
 
-      return matchSearch && matchCategory && matchLevel;
+      return matchSearch && matchCategory && matchLevel && matchAccent;
     });
-  }, [searchQuery, selectedCategory, selectedLevel]);
+  }, [searchQuery, selectedCategory, selectedLevel, selectedAccentFilter]);
+
+  const QUICK_SEARCH_CHIPS = [
+    { label: '☕ قهوه و کافه', term: 'coffee' },
+    { label: '✈️ فرودگاه و پرواز', term: 'airport' },
+    { label: '🇮🇶 شلونك (عراقی)', term: 'شلونك' },
+    { label: '🇱🇧 كيفك (لبنانی)', term: 'كيفك' },
+    { label: '🏷️ تخفیف و خرید', term: 'discount' },
+    { label: '🍽️ سفارش غذا', term: 'order' },
+    { label: '💼 مصاحبه کاری', term: 'interview' },
+    { label: '💡 اصطلاحات (Slang)', term: 'idiom' },
+  ];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -197,20 +221,44 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({
           </button>
         </div>
 
-        {/* Search Input & Level Filter */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div className="relative md:col-span-3">
-            <Search className="w-5 h-5 absolute right-4 top-3.5 text-slate-400" />
+        {/* Search Input, Accent Filter & Level Filter */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+          <div className="relative md:col-span-6">
+            <Search className="w-5 h-5 absolute right-4 top-3.5 text-indigo-500 dark:text-indigo-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="جستجوی کلمه انگلیسی، معنی فارسی یا اصطلاحات روزمره..."
-              className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl pr-12 pl-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              placeholder="جستجوی کلمه انگلیسی، معنی فارسی، اصطلاحات یا لهجه‌ها (عراقی، لبنانی، آمریکایی)..."
+              className="w-full bg-slate-50 dark:bg-slate-800/90 border border-indigo-200 dark:border-indigo-900/50 rounded-xl pr-12 pl-10 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner transition-all font-sans"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute left-3 top-3.5 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full bg-slate-200/50 dark:bg-slate-700/50"
+                title="پاک‌کردن جستجو"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="md:col-span-3 flex items-center gap-2">
+            <Globe className="w-4 h-4 text-slate-400 shrink-0" />
+            <select
+              value={selectedAccentFilter}
+              onChange={(e) => setSelectedAccentFilter(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">همه لهجه‌ها و گویش‌ها</option>
+              <option value="en-US">🇺🇸 لهجه آمریکایی (US)</option>
+              <option value="en-GB">🇬🇧 لهجه بریتانیایی (UK)</option>
+              <option value="ar-IQ">🇮🇶 لهجه عراقی (IQ)</option>
+              <option value="ar-LB">🇱🇧 لهجه لبنانی (LB)</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-3 flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-slate-400 shrink-0" />
             <select
               value={selectedLevel}
@@ -225,6 +273,51 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({
               <option value="C1">سطح C1 (پیشرفته)</option>
             </select>
           </div>
+        </div>
+
+        {/* Quick Search Chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-none text-xs">
+          <span className="text-[11px] font-bold text-slate-400 shrink-0">جستجوی سریع:</span>
+          {QUICK_SEARCH_CHIPS.map((chip, i) => (
+            <button
+              key={i}
+              onClick={() => setSearchQuery(chip.term)}
+              className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 font-bold whitespace-nowrap transition-all border border-indigo-100 dark:border-indigo-900/50"
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search Stats & Match Counter Bar */}
+        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2 font-bold">
+            <Sparkles className="w-4 h-4 text-indigo-500" />
+            <span>
+              {activeTabMode === 'words'
+                ? `تعداد نتایج کلمات: ${filteredWords.length.toLocaleString('fa-IR')} مورد`
+                : `تعداد نتایج جملات: ${filteredSentences.length.toLocaleString('fa-IR')} جمله`}
+            </span>
+            {searchQuery && (
+              <span className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md font-sans">
+                جستجوی: "{searchQuery}"
+              </span>
+            )}
+          </div>
+
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCategory('all');
+                setSelectedLevel('all');
+                setSelectedAccentFilter('all');
+              }}
+              className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
+            >
+              بازنشانی فیلترها
+            </button>
+          )}
         </div>
 
         {/* Categories Pills */}

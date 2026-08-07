@@ -9,10 +9,20 @@ import {
   Languages,
   User,
   Bot,
-  Globe
+  Globe,
+  Mic,
+  MicOff,
+  WifiOff
 } from 'lucide-react';
 import { ChatMessage, DifficultyLevel, PersonaOption, DialectType, GenderType } from '../types';
-import { speakEnglishText, stopSpeaking, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
+import {
+  speakEnglishText,
+  stopSpeaking,
+  ACCENT_CONFIGS,
+  SupportedAccent,
+  startSpeechRecognition,
+  generateOfflineReply
+} from '../lib/speech';
 
 interface AiChatStudioProps {
   userLevel: DifficultyLevel;
@@ -94,9 +104,51 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  const [isListening, setIsListening] = useState(false);
+  const recognizerRef = useRef<{ stop: () => void } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (recognizerRef.current) {
+        recognizerRef.current.stop();
+      }
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      if (recognizerRef.current) {
+        recognizerRef.current.stop();
+        recognizerRef.current = null;
+      }
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      const rec = startSpeechRecognition(
+        selectedAccent,
+        (transcript, isFinal) => {
+          setInput(transcript);
+        },
+        (errorMsg) => {
+          console.warn('Speech error:', errorMsg);
+          setIsListening(false);
+        },
+        () => {
+          setIsListening(false);
+        }
+      );
+      recognizerRef.current = rec;
+    }
+  };
+
   const handleSendMessage = async (customText?: string) => {
     const textToSend = customText || input.trim();
     if (!textToSend || loading) return;
+
+    if (isListening && recognizerRef.current) {
+      recognizerRef.current.stop();
+      setIsListening(false);
+    }
 
     const userMsgId = `user_${Date.now()}`;
     const userMsg: ChatMessage = {
@@ -162,20 +214,45 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
 
         setMessages((prev) => [...prev, aiMsg]);
 
-        // Auto read aloud AI response if enabled
+        // Auto read aloud AI response
         speakText(aiMsg.id, aiMsg.text);
       } else {
-        throw new Error(resData.error || 'خطا در ارتباط با هوش مصنوعی');
+        throw new Error(resData.error || 'خطا در ارتباط آنلاین');
       }
     } catch (err: any) {
-      console.error('Error fetching AI response:', err);
-      const errorMsg: ChatMessage = {
-        id: `err_${Date.now()}`,
-        sender: 'system',
-        text: 'متأسفانه مشکلی در برقراری ارتباط با هوش مصنوعی رخ داد. لطفاً دوباره تلاش کنید.',
+      console.warn('Network or API issue, triggering Offline Fallback Engine:', err);
+      // Fallback Engine for Offline / Disconnected Mode
+      const offlineResult = generateOfflineReply(textToSend, selectedAccent, userGender);
+      
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === userMsgId
+            ? {
+                ...m,
+                feedback: {
+                  grammarScore: 90,
+                  explanationFa: offlineResult.explanationFa,
+                  genderNoteFa: offlineResult.genderNoteFa,
+                  betterAlternatives: [],
+                  vocabularyTips: [],
+                  persianTranslation: offlineResult.replyFa,
+                },
+              }
+            : m
+        )
+      );
+
+      const aiMsgId = `ai_offline_${Date.now()}`;
+      const aiMsg: ChatMessage = {
+        id: aiMsgId,
+        sender: 'ai',
+        text: offlineResult.replyEn,
+        persianText: offlineResult.replyFa,
         timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
       };
-      setMessages((prev) => [...prev, errorMsg]);
+
+      setMessages((prev) => [...prev, aiMsg]);
+      speakText(aiMsg.id, aiMsg.text);
     } finally {
       setLoading(false);
     }
@@ -516,6 +593,18 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
 
           {/* Input Box */}
           <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700">
+            {isListening && (
+              <div className="mb-2.5 px-3 py-1.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl flex items-center justify-between text-xs text-rose-700 dark:text-rose-300 font-bold animate-pulse">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                  <span>موتور گفتار به متن فعال است... صحبت کنید (پشتیبانی آفلاین و آنلاین)</span>
+                </div>
+                <span className="text-[10px] dir-ltr font-mono bg-white/80 dark:bg-slate-900/80 px-2 py-0.5 rounded">
+                  {selectedAccent}
+                </span>
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -523,11 +612,28 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
               }}
               className="flex items-center gap-2"
             >
+              <button
+                type="button"
+                onClick={toggleListening}
+                title={isListening ? 'توقف ضبط صدا' : 'ضبط و تبدیل صدا به متن (STT)'}
+                className={`p-3 rounded-xl font-bold text-xs flex items-center justify-center transition-all cursor-pointer shrink-0 border ${
+                  isListening
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500 shadow-lg shadow-rose-600/30 animate-pulse'
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700'
+                }`}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
+              </button>
+
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="متن انگلیسی خود را اینجا بنویسید (مثلاً: Hi, how was your day?)..."
+                placeholder={
+                  isListening
+                    ? 'در حال شنیدن و تبدیل گفتار شما به متن...'
+                    : 'متن انگلیسی یا عربی خود را بنویسید یا دکمه میکروفون را بزنید...'
+                }
                 disabled={loading}
                 className="flex-1 font-sans bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dir-ltr text-left transition-all"
               />
@@ -538,7 +644,7 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
                 className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-5 py-3 rounded-xl font-bold text-xs flex items-center gap-2 shadow-md shadow-indigo-600/20 transition-all shrink-0 cursor-pointer"
               >
                 <Send className="w-4 h-4 rotate-180" />
-                <span className="hidden sm:inline">ارسال پیام</span>
+                <span className="hidden sm:inline">ارسال</span>
               </button>
             </form>
           </div>

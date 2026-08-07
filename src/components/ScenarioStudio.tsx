@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Theater,
   CheckCircle2,
@@ -8,11 +8,19 @@ import {
   ArrowRight,
   HelpCircle,
   User,
-  Globe
+  Globe,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import { PRACTICAL_SCENARIOS } from '../data/scenariosData';
 import { ChatMessage, DifficultyLevel, RoleplayScenario, DialectType, GenderType } from '../types';
-import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
+import {
+  speakEnglishText,
+  ACCENT_CONFIGS,
+  SupportedAccent,
+  startSpeechRecognition,
+  generateOfflineReply
+} from '../lib/speech';
 
 interface ScenarioStudioProps {
   userLevel: DifficultyLevel;
@@ -58,10 +66,52 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
     ]);
   };
 
+  const [isListening, setIsListening] = useState(false);
+  const recognizerRef = useRef<{ stop: () => void } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (recognizerRef.current) {
+        recognizerRef.current.stop();
+      }
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      if (recognizerRef.current) {
+        recognizerRef.current.stop();
+        recognizerRef.current = null;
+      }
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      const rec = startSpeechRecognition(
+        activeScenario?.dialect || selectedAccent,
+        (transcript) => {
+          setInput(transcript);
+        },
+        (err) => {
+          console.warn('Scenario speech error:', err);
+          setIsListening(false);
+        },
+        () => {
+          setIsListening(false);
+        }
+      );
+      recognizerRef.current = rec;
+    }
+  };
+
   const handleSendScenarioMsg = async (customText?: string) => {
     if (!activeScenario || loading) return;
     const textToSend = customText || input.trim();
     if (!textToSend) return;
+
+    if (isListening && recognizerRef.current) {
+      recognizerRef.current.stop();
+      setIsListening(false);
+    }
 
     const userMsg: ChatMessage = {
       id: `sc_user_${Date.now()}`,
@@ -109,9 +159,21 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
             setCompletedObjectives((prev) => ({ ...prev, [nextObj.id]: true }));
           }
         }
+      } else {
+        throw new Error('Offline or server error');
       }
     } catch (e) {
-      console.error('Scenario chat failed', e);
+      console.warn('Offline fallback for scenario mode:', e);
+      const offlineRes = generateOfflineReply(textToSend, activeScenario.dialect || selectedAccent, userGender);
+      const aiMsg: ChatMessage = {
+        id: `sc_ai_off_${Date.now()}`,
+        sender: 'ai',
+        text: offlineRes.replyEn,
+        persianText: offlineRes.replyFa,
+        timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+      };
+      setScenarioMessages((prev) => [...prev, aiMsg]);
+      speakEnglishText(aiMsg.text, 1.0, selectedAccent);
     } finally {
       setLoading(false);
     }
@@ -338,6 +400,13 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
 
             {/* Input */}
             <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700">
+              {isListening && (
+                <div className="mb-2 px-3 py-1 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-lg flex items-center gap-2 text-xs text-rose-700 dark:text-rose-300 font-bold animate-pulse">
+                  <div className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                  <span>میکروفون فعال است... پاسخ خود را شفاهی بگویید</span>
+                </div>
+              )}
+
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -345,11 +414,28 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
                 }}
                 className="flex items-center gap-2"
               >
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  title={isListening ? 'توقف ضبط' : 'ورودی صوتی (میکروفون)'}
+                  className={`p-3 rounded-xl font-bold text-xs flex items-center justify-center transition-all cursor-pointer shrink-0 border ${
+                    isListening
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500 shadow-lg shadow-rose-600/30 animate-pulse'
+                      : 'bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700'
+                  }`}
+                >
+                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
+                </button>
+
                 <input
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="پاسخ خود را به انگلیسی بنویسید..."
+                  placeholder={
+                    isListening
+                      ? 'در حال گوش دادن...'
+                      : 'پاسخ خود را بنویسید یا دکمه میکروفون را فشار دهید...'
+                  }
                   disabled={loading}
                   className="flex-1 font-sans bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dir-ltr text-left"
                 />
