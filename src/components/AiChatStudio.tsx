@@ -24,6 +24,7 @@ import {
   generateOfflineReply
 } from '../lib/speech';
 import { analyzeSentenceOffline } from '../lib/offlineAnalyzer';
+import { aiManager } from '../core/AIManager';
 
 interface AiChatStudioProps {
   userLevel: DifficultyLevel;
