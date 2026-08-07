@@ -20,7 +20,8 @@ let activeAudioFallback: HTMLAudioElement | null = null;
 export function speakEnglishText(
   text: string,
   rate: number = 1.0,
-  accent: SupportedAccent = 'en-US'
+  accent: SupportedAccent = 'en-US',
+  pitch: number = 1.0
 ): Promise<void> {
   return new Promise((resolve) => {
     if (!text || !text.trim()) {
@@ -101,6 +102,7 @@ export function speakEnglishText(
         const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.lang = langCode;
         utterance.rate = rate;
+        utterance.pitch = pitch;
 
         (window as any)._activeUtteranceRef = utterance;
 

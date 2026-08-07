@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Mic, MicOff, Volume2, Sparkles, AlertCircle, RefreshCw, CheckCircle2, User, HelpCircle } from 'lucide-react';
-import { ChatMessage, DialectType, GenderType, DifficultyLevel } from '../types';
+import { Send, Mic, MicOff, Volume2, Sparkles, RefreshCw, CheckCircle2, User, Users, MessageSquare } from 'lucide-react';
+import { ChatMessage, DialectType, GenderType, DifficultyLevel, Persona } from '../types';
+import { CHAT_PERSONAS } from '../data/personasData';
 import { aiManager } from '../core/AIManager';
 import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
 
@@ -9,15 +10,8 @@ interface AiChatStudioProps {
 }
 
 export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'm0',
-      sender: 'ai',
-      text: 'Hello! I am your interactive LinguaAI partner. Type or speak any sentence, and I will respond instantly and provide full grammar analysis!',
-      persianText: 'سلام! من هم‌صحبت هوشمند LinguaAI شما هستم. هر جمله یا کلمه‌ای بنویسید یا بگویید تا بلافاصله پاسخ دهم و تحلیل کامل گرامری ارائه کنم!',
-      timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
+  const [selectedPersona, setSelectedPersona] = useState<Persona>(CHAT_PERSONAS[0]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const [inputVal, setInputVal] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,9 +23,20 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Initialize chat when persona changes
   useEffect(() => {
-    setSelectedAccent(activeDialect as SupportedAccent);
-  }, [activeDialect]);
+    setMessages([
+      {
+        id: `init_${selectedPersona.id}_${Date.now()}`,
+        sender: 'ai',
+        text: selectedPersona.greetingEn,
+        persianText: selectedPersona.greetingFa,
+        timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+        personaId: selectedPersona.id,
+      },
+    ]);
+    setSelectedAccent(selectedPersona.dialect as SupportedAccent);
+  }, [selectedPersona]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,12 +62,12 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
       const result = await aiManager.sendChatMessage({
         userText: userMsg.text,
         history: messages.slice(-6),
+        personaId: selectedPersona.id,
         dialect: selectedAccent,
         gender: userGender,
         level: userLevel,
       });
 
-      // Update user message with grammar feedback
       if (result.feedback) {
         setMessages((prev) =>
           prev.map((msg) =>
@@ -79,23 +84,21 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
       const aiMsg: ChatMessage = {
         id: `ai_${Date.now()}`,
         sender: 'ai',
-        text: result.replyEn || 'Good job! Keep practicing.',
-        persianText: result.replyFa || 'عالی بود! به تمرین ادامه دهید.',
+        text: result.replyEn || 'Great practice!',
+        persianText: result.replyFa || 'تمرین عالی بود!',
         timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+        personaId: selectedPersona.id,
       };
 
       setMessages((prev) => [...prev, aiMsg]);
-      speakEnglishText(aiMsg.text, 1.0, selectedAccent);
+      speakEnglishText(
+        aiMsg.text,
+        selectedPersona.speechRate || 1.0,
+        selectedAccent,
+        selectedPersona.speechPitch || 1.0
+      );
     } catch (err) {
       console.error('Chat error:', err);
-      const fallbackAiMsg: ChatMessage = {
-        id: `ai_${Date.now()}`,
-        sender: 'ai',
-        text: `I received your message: "${textToSend}". Great effort!`,
-        persianText: `پیام شما دریافت شد: "${textToSend}". تلاش بسیار خوبی بود!`,
-        timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages((prev) => [...prev, fallbackAiMsg]);
     } finally {
       setLoading(false);
     }
@@ -139,17 +142,53 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] max-w-5xl mx-auto p-3 md:p-6 space-y-4">
-      {/* Top Controls & Preferences */}
-      <div className="bg-slate-900 border border-slate-800 p-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3">
+      {/* Persona Selector Carousel */}
+      <div className="bg-slate-900 border border-slate-800 p-3 rounded-3xl space-y-3">
+        <div className="flex items-center justify-between text-xs px-2">
+          <span className="font-bold text-slate-300 flex items-center gap-1.5">
+            <Users className="w-4 h-4 text-indigo-400" />
+            انتخاب هم‌صحبت واقعی (آقا / خانم با لحن‌های مختلف):
+          </span>
+          <span className="text-slate-400 text-[11px] bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800">
+            {selectedPersona.gender === 'male' ? '👨 مرد' : '👩 زن'} | {selectedPersona.titleFa}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {CHAT_PERSONAS.map((p) => {
+            const isSelected = p.id === selectedPersona.id;
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelectedPersona(p)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-2xl border text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  isSelected
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/30'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <span className="text-lg">{p.avatar}</span>
+                <div className="text-right">
+                  <p>{p.name}</p>
+                  <p className="text-[10px] opacity-80 font-normal">{p.roleFa}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Preferences Bar */}
+      <div className="bg-slate-900/80 border border-slate-800 p-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
           <span className="text-slate-400 font-bold flex items-center gap-1">
-            <User className="w-4 h-4 text-indigo-400" />
-            جنسیت:
+            <User className="w-3.5 h-3.5 text-indigo-400" />
+            جنسیت شما:
           </span>
           <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
             <button
               onClick={() => setUserGender('masculine')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+              className={`px-2.5 py-0.5 rounded-lg font-bold transition-all cursor-pointer ${
                 userGender === 'masculine' ? 'bg-indigo-600 text-white' : 'text-slate-400'
               }`}
             >
@@ -157,7 +196,7 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
             </button>
             <button
               onClick={() => setUserGender('feminine')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+              className={`px-2.5 py-0.5 rounded-lg font-bold transition-all cursor-pointer ${
                 userGender === 'feminine' ? 'bg-indigo-600 text-white' : 'text-slate-400'
               }`}
             >
@@ -166,27 +205,27 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-slate-400 font-bold">سطح زبان:</span>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 font-bold">سطح:</span>
           <select
             value={userLevel}
             onChange={(e) => setUserLevel(e.target.value as DifficultyLevel)}
-            className="bg-slate-950 border border-slate-800 text-slate-200 rounded-xl px-2.5 py-1 font-bold focus:outline-none cursor-pointer"
+            className="bg-slate-950 border border-slate-800 text-slate-200 rounded-xl px-2 py-0.5 font-bold focus:outline-none cursor-pointer"
           >
-            <option value="A1">A1 (مبتدی)</option>
-            <option value="A2">A2 (پیش‌مبتدی)</option>
-            <option value="B1">B1 (متوسط)</option>
-            <option value="B2">B2 (فرامتوسط)</option>
-            <option value="C1">C1 (پیشرفته)</option>
+            <option value="A1">A1 مبتدی</option>
+            <option value="A2">A2 پیش‌مبتدی</option>
+            <option value="B1">B1 متوسط</option>
+            <option value="B2">B2 فرامتوسط</option>
+            <option value="C1">C1 پیشرفته</option>
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {ACCENT_CONFIGS.map((acc) => (
             <button
               key={acc.code}
               onClick={() => setSelectedAccent(acc.code)}
-              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                 selectedAccent === acc.code
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'bg-slate-950 text-slate-400 hover:text-slate-200'
@@ -214,15 +253,25 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
                     : 'bg-slate-800 text-slate-100 rounded-bl-none border border-slate-700/60'
                 }`}
               >
+                {!isUser && (
+                  <div className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-700/50 text-xs font-bold text-indigo-300">
+                    <span>{selectedPersona.avatar}</span>
+                    <span>{selectedPersona.name}</span>
+                    <span className="text-[10px] bg-slate-900 px-2 py-0.5 rounded-full text-slate-400">
+                      {selectedPersona.titleFa}
+                    </span>
+                  </div>
+                )}
+
                 <p className="font-sans font-medium text-base leading-normal">{msg.text}</p>
 
                 {msg.persianText && (
-                  <p className="text-xs text-slate-300 dark:text-slate-300 pt-2 mt-2 border-t border-slate-700/50 font-sans">
+                  <p className="text-xs text-slate-300 pt-2 mt-2 border-t border-slate-700/50 font-sans">
                     {msg.persianText}
                   </p>
                 )}
 
-                {/* User Message Feedback Quick Bar */}
+                {/* User Message Grammar Bar */}
                 {isUser && msg.feedback && (
                   <div className="mt-3 pt-2.5 border-t border-indigo-400/40 flex items-center justify-between text-xs text-indigo-100">
                     <span className="font-bold flex items-center gap-1">
@@ -237,22 +286,22 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
                       }
                       className="bg-white/20 hover:bg-white/30 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-all cursor-pointer"
                     >
-                      تحلیل خطابه & گرامر
+                      تحلیل و پیشنهاد
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* Detailed Feedback Modal Box */}
+              {/* Analysis Drawer */}
               {isUser && msg.feedback && selectedMsgForAnalysis === msg.id && (
                 <div className="max-w-[85%] md:max-w-[75%] bg-amber-950/80 border border-amber-600/40 rounded-2xl p-3.5 text-xs text-amber-100 space-y-2 font-sans">
                   <div className="flex items-center gap-1.5 font-bold text-amber-300">
                     <Sparkles className="w-4 h-4" />
-                    <span>تحلیل گرامری و پیشنهاد بهبود:</span>
+                    <span>تحلیل گرامری و بهبود جمله:</span>
                   </div>
                   {msg.feedback.correctedSentence && (
                     <p>
-                      <strong>جمله اصلاح‌شده:</strong> "{msg.feedback.correctedSentence}"
+                      <strong>اصلاح‌شده:</strong> "{msg.feedback.correctedSentence}"
                     </p>
                   )}
                   {msg.feedback.explanationFa && (
@@ -273,14 +322,21 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
                 </div>
               )}
 
-              {/* Audio Playback Button */}
+              {/* Native Voice Audio Button */}
               {!isUser && (
                 <button
-                  onClick={() => speakEnglishText(msg.text, 1.0, selectedAccent)}
+                  onClick={() =>
+                    speakEnglishText(
+                      msg.text,
+                      selectedPersona.speechRate || 1.0,
+                      selectedAccent,
+                      selectedPersona.speechPitch || 1.0
+                    )
+                  }
                   className="flex items-center gap-1 text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-all p-1 cursor-pointer"
                 >
                   <Volume2 className="w-4 h-4" />
-                  <span>تلفظ نیتیو</span>
+                  <span>پخش با صدای نیتیو {selectedPersona.name}</span>
                 </button>
               )}
             </div>
@@ -288,16 +344,16 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
         })}
 
         {loading && (
-          <div className="flex items-center gap-2 text-slate-400 text-xs p-3">
+          <div className="flex items-center gap-2 text-slate-400 text-xs p-3 bg-slate-900 rounded-2xl border border-slate-800">
             <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
-            <span>هوش مصنوعی در حال تحلیل و ساخت پاسخ...</span>
+            <span>{selectedPersona.name} در حال نوشتن پاسخ و تحلیل گرامری...</span>
           </div>
         )}
 
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input Area */}
+      {/* Input Box */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 flex items-center gap-2">
         <button
           onClick={toggleVoiceInput}
@@ -316,7 +372,7 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
           value={inputVal}
           onChange={(e) => setInputVal(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="جمله انگلیسی یا عربی بنویسید یا کلمه‌ای بپرسید..."
+          placeholder={`پیام خود را به ${selectedPersona.name} بنویسید یا بگویید...`}
           className="flex-1 bg-transparent text-slate-100 text-sm px-3 focus:outline-none placeholder-slate-500"
           dir="ltr"
         />

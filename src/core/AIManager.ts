@@ -1,4 +1,5 @@
 import { ChatMessage, DialectType, GenderType, DifficultyLevel } from '../types';
+import { analyzeOfflineMessage } from '../lib/offlineAnalyzer';
 
 export interface ChatExplainRequest {
   userText: string;
@@ -64,18 +65,25 @@ export class AIManager {
         providerUsed: 'gemini_cloud',
       };
     } catch (err: any) {
-      console.warn('Fallback in AIManager chat:', err);
+      console.warn('Using offline NLP analyzer in AIManager:', err);
+      const offlineRes = analyzeOfflineMessage(
+        req.userText,
+        req.personaId || 'alex_casual',
+        req.dialect || 'en-US'
+      );
+
       return {
-        replyEn: `I received: "${req.userText}". Keep up the great practice!`,
-        replyFa: `پیام شما دریافت شد: "${req.userText}". به تمرین خوب ادامه دهید!`,
+        replyEn: offlineRes.replyEn,
+        replyFa: offlineRes.replyFa,
         feedback: {
-          grammarScore: 90,
-          correctedSentence: req.userText,
-          explanationFa: 'جمله شما مفهوم و قابل قبول است.',
-          betterAlternatives: [],
-          persianTranslation: `پیام: ${req.userText}`,
+          grammarScore: offlineRes.grammarScore,
+          correctedSentence: offlineRes.correctedSentence,
+          explanationFa: offlineRes.explanationFa,
+          betterAlternatives: offlineRes.betterAlternatives,
+          vocabularyTips: offlineRes.vocabularyTips,
+          persianTranslation: offlineRes.replyFa,
         },
-        providerUsed: 'offline_fallback',
+        providerUsed: 'offline_nlp_engine',
       };
     }
   }
@@ -110,15 +118,23 @@ export class AIManager {
       return data.data || data;
     } catch (err) {
       console.warn('Fallback in scenario chat:', err);
+      const offlineRes = analyzeOfflineMessage(
+        req.userText,
+        'alex_casual',
+        req.dialect || 'en-US'
+      );
+
       return {
-        replyEn: `[Roleplay Response]: Thanks for saying "${req.userText}". Let's continue!`,
-        replyFa: `[پاسخ سناریو]: ممنون از شما. به مکالمه ادامه دهیم!`,
-        grammarScore: 90,
-        correctedSentence: req.userText,
-        explanationFa: 'تمرین خوبی بود.',
+        replyEn: offlineRes.replyEn,
+        replyFa: offlineRes.replyFa,
+        grammarScore: offlineRes.grammarScore,
+        correctedSentence: offlineRes.correctedSentence,
+        explanationFa: offlineRes.explanationFa,
+        betterAlternatives: offlineRes.betterAlternatives,
       };
     }
   }
 }
 
 export const aiManager = new AIManager();
+

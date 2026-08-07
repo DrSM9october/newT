@@ -1,6 +1,23 @@
 export type DialectType = 'en-US' | 'en-GB' | 'en-AU' | 'ar-IQ' | 'ar-LB';
 export type GenderType = 'masculine' | 'feminine';
 export type DifficultyLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+export type PersonaMood = 'friendly' | 'formal' | 'excited' | 'patient' | 'witty' | 'empathetic';
+
+export interface Persona {
+  id: string;
+  name: string;
+  titleFa: string;
+  roleFa: string;
+  gender: 'male' | 'female';
+  mood: PersonaMood;
+  avatar: string;
+  dialect: DialectType;
+  descriptionFa: string;
+  greetingEn: string;
+  greetingFa: string;
+  speechPitch?: number;
+  speechRate?: number;
+}
 
 export interface ChatMessage {
   id: string;
@@ -8,6 +25,7 @@ export interface ChatMessage {
   text: string;
   persianText?: string;
   timestamp: string;
+  personaId?: string;
   audioUrl?: string;
   feedback?: {
     grammarScore: number;
@@ -28,6 +46,7 @@ export interface DictionaryWord {
   meaningFa: string;
   partOfSpeech: string;
   level: DifficultyLevel;
+  dialect?: DialectType;
   examples: { en: string; fa: string; gender?: 'masculine' | 'feminine' | 'unisex' }[];
   collocations?: string[];
   synonyms?: string[];
@@ -47,7 +66,7 @@ export interface RoleplayScenario {
   titleFa: string;
   titleEn: string;
   descriptionFa: string;
-  category: 'restaurant_cafe' | 'travel_airport' | 'shopping_market' | 'job_interview' | 'social_chat' | 'directions_transport' | 'hotel_stay';
+  category: 'restaurant_cafe' | 'travel_airport' | 'shopping_market' | 'job_interview' | 'social_chat' | 'directions_transport' | 'hotel_stay' | 'emergency_doctor' | 'business_negotiation';
   level: DifficultyLevel;
   dialect?: DialectType;
   icon: string;
@@ -56,6 +75,7 @@ export interface RoleplayScenario {
     role: string;
     avatar: string;
     systemPrompt: string;
+    mood?: PersonaMood;
   };
   objectives: PracticalScenarioObjective[];
   starterMessage: string;
