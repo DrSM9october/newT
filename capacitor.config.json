@@ -1,8 +1,0 @@
-{
-  "appId": "com.linguaai.app",
-  "appName": "LinguaAI",
-  "webDir": "dist",
-  "server": {
-    "androidScheme": "https"
-  }
-}
