@@ -5,11 +5,13 @@ import { DictionaryView } from './components/DictionaryView';
 import { ScenarioStudio } from './components/ScenarioStudio';
 import { PracticeHub } from './components/PracticeHub';
 import { ProgressDashboard } from './components/ProgressDashboard';
-import { DifficultyLevel, UserProgress } from './types';
+import { DifficultyLevel, UserProgress, DialectType, GenderType } from './types';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'chat' | 'dictionary' | 'scenarios' | 'drills' | 'progress'>('chat');
   const [userLevel, setUserLevel] = useState<DifficultyLevel>('A2');
+  const [activeDialect, setActiveDialect] = useState<DialectType>('en-US');
+  const [userGender, setUserGender] = useState<GenderType>('masculine');
   const [darkMode, setDarkMode] = useState<boolean>(false);
 
   // User progress state with localStorage backup
@@ -101,6 +103,10 @@ export default function App() {
         setActiveTab={setActiveTab}
         userLevel={userLevel}
         setUserLevel={setUserLevel}
+        activeDialect={activeDialect}
+        setActiveDialect={setActiveDialect}
+        userGender={userGender}
+        setUserGender={setUserGender}
         streak={progress.dailyStreak}
         masteredCount={progress.masteredWordIds.length}
         darkMode={darkMode}
@@ -109,11 +115,19 @@ export default function App() {
 
       {/* Main View Router */}
       <main className="pb-12">
-        {activeTab === 'chat' && <AiChatStudio userLevel={userLevel} />}
+        {activeTab === 'chat' && (
+          <AiChatStudio
+            userLevel={userLevel}
+            activeDialect={activeDialect}
+            userGender={userGender}
+          />
+        )}
 
         {activeTab === 'dictionary' && (
           <DictionaryView
             userLevel={userLevel}
+            activeDialect={activeDialect}
+            userGender={userGender}
             masteredIds={progress.masteredWordIds}
             bookmarkedIds={progress.bookmarkedWordIds}
             onToggleBookmark={handleToggleBookmark}
@@ -122,11 +136,21 @@ export default function App() {
         )}
 
         {activeTab === 'scenarios' && (
-          <ScenarioStudio userLevel={userLevel} onCompleteScenario={handleCompleteScenario} />
+          <ScenarioStudio
+            userLevel={userLevel}
+            activeDialect={activeDialect}
+            userGender={userGender}
+            onCompleteScenario={handleCompleteScenario}
+          />
         )}
 
         {activeTab === 'drills' && (
-          <PracticeHub userLevel={userLevel} onIncrementXp={handleIncrementXp} />
+          <PracticeHub
+            userLevel={userLevel}
+            activeDialect={activeDialect}
+            userGender={userGender}
+            onIncrementXp={handleIncrementXp}
+          />
         )}
 
         {activeTab === 'progress' && (

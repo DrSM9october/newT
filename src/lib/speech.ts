@@ -1,8 +1,12 @@
-export type SupportedAccent = 'en-US' | 'en-GB';
+import { DialectType } from '../types';
+
+export type SupportedAccent = DialectType;
 
 export const ACCENT_CONFIGS: { code: SupportedAccent; labelFa: string; labelEn: string; flag: string }[] = [
   { code: 'en-US', labelFa: 'آمریکایی (US)', labelEn: 'American', flag: '🇺🇸' },
   { code: 'en-GB', labelFa: 'بریتانیایی (UK)', labelEn: 'British', flag: '🇬🇧' },
+  { code: 'ar-IQ', labelFa: 'عراقی (Iraqi)', labelEn: 'Iraqi Dialect', flag: '🇮🇶' },
+  { code: 'ar-LB', labelFa: 'لبنانی (Lebanese)', labelEn: 'Lebanese Dialect', flag: '🇱🇧' },
 ];
 
 export function speakEnglishText(
@@ -21,18 +25,25 @@ export function speakEnglishText(
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = accent;
+    
+    // Set appropriate lang code
+    let langCode: string = accent;
+    if (accent === 'ar-IQ' || accent === 'ar-LB') {
+      langCode = 'ar-SA'; // Standard Arabic TTS voice fallback for Arabic dialects
+    }
+    utterance.lang = langCode;
     utterance.rate = rate;
 
-    // Pick appropriate English voice matching accent code
+    // Pick appropriate voice matching accent code or language prefix
     const voices = window.speechSynthesis.getVoices();
+    const prefix = accent.slice(0, 2); // 'en' or 'ar'
     const exactVoice = voices.find((v) => v.lang === accent || v.lang.replace('_', '-') === accent);
-    const fallbackVoice = voices.find((v) => v.lang.startsWith(accent.slice(0, 2)) || v.lang.startsWith('en'));
+    const langVoice = voices.find((v) => v.lang.startsWith(prefix));
     
     if (exactVoice) {
       utterance.voice = exactVoice;
-    } else if (fallbackVoice) {
-      utterance.voice = fallbackVoice;
+    } else if (langVoice) {
+      utterance.voice = langVoice;
     }
 
     utterance.onend = () => resolve();
@@ -47,4 +58,5 @@ export function stopSpeaking(): void {
     window.speechSynthesis.cancel();
   }
 }
+
 

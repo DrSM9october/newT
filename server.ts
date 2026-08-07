@@ -38,7 +38,7 @@ app.get("/api/health", (req, res) => {
 // AI Chat with feedback endpoint
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, history, personaPrompt, userLevel } = req.body;
+    const { message, history, personaPrompt, userLevel, dialect = "en-US", userGender = "masculine" } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: "Message is required" });
@@ -46,25 +46,46 @@ app.post("/api/chat", async (req, res) => {
 
     const ai = getGeminiClient();
 
-    const systemInstruction = `
-You are an expert, encouraging English language tutor for a Persian speaker.
-Your active role/persona: ${personaPrompt || "Friendly Native English Conversation Partner"}.
-Target Student CEFR Level: ${userLevel || "A2"}.
+    const dialectNames: Record<string, string> = {
+      "en-US": "American English (لهجه آمریکایی)",
+      "en-GB": "British English (لهجه بریتانیایی)",
+      "ar-IQ": "Iraqi Arabic Dialect (لهجه محلی عراقی)",
+      "ar-LB": "Lebanese Arabic Dialect (لهجه محلی لبنانی)",
+    };
 
-Your task:
-1. Respond to the user's English input naturally as your persona in English. Keep vocabulary appropriate for Level ${userLevel || "A2"}.
-2. Provide an accurate, idiomatic Persian translation of your English reply.
-3. Analyze the user's last message for grammar, spelling, or naturalness. If there are errors, provide the corrected sentence and a brief Persian explanation. If their sentence is already perfect, leave correctedSentence null and score 100.
-4. Suggest 2 better or more native alternatives to express what the user said.
-5. Highlight 2-3 key vocabulary words from your response with Persian equivalents.
+    const targetDialectName = dialectNames[dialect] || "American English";
+    const userGenderLabel = userGender === "feminine" ? "Female / مؤنث ♀️" : "Male / مذکر ♂️";
+
+    const systemInstruction = `
+You are an expert multilingual tutor specializing in Persian bidirectional conversation and language training.
+Active target language/dialect: ${targetDialectName}.
+Student Gender: ${userGenderLabel}.
+Student CEFR Level: ${userLevel || "A2"}.
+Active Persona/Role: ${personaPrompt || "Friendly Native Tutor"}.
+
+STRICT INSTRUCTIONS:
+1. Respond to the user's input naturally in the specified target dialect (${targetDialectName}).
+   - If target is Iraqi Arabic (ar-IQ), use authentic local Iraqi vocabulary (e.g., شلونك/شلونچ, هسا, دا اسوي, هسة, عيني).
+   - If target is Lebanese Arabic (ar-LB), use authentic local Lebanese vocabulary (e.g., كيفك/كيفيك, شو اخبارك, هلق, شو هاد, تكرم عينك).
+   - If target is American English (en-US), use authentic American phrasing.
+   - If target is British English (en-GB), use authentic British phrasing (e.g., cheers, mate, knackered).
+2. ADAPT FOR STUDENT GENDER (${userGenderLabel}):
+   - Use correct gendered grammar forms when addressing the user (especially critical for Arabic like Iraqi/Lebanese verb and pronoun endings - e.g., feminine -چ or -ِك vs masculine -ك).
+3. Provide a fluent, idiomatic Persian (فارسی) translation of your reply.
+4. Analyze the user's message for grammar, spelling, gender agreement, or naturalness in ${targetDialectName}.
+5. If there are errors or wrong gender agreements, provide the corrected sentence and a clear Persian explanation.
+6. Provide a 'genderNoteFa' if there is a gender distinction (e.g., how the sentence differs when addressing a male ♂️ vs female ♀️).
+7. Suggest 2 better or more native alternative phrases.
+8. Highlight 2-3 key vocabulary words/idioms with Persian equivalents.
 
 Output format MUST be strictly JSON adhering to this schema:
 {
-  "replyEn": "string - your reply in English",
-  "replyFa": "string - Persian translation of your reply",
+  "replyEn": "string - your reply in target language/dialect",
+  "replyFa": "string - fluent Persian translation",
   "grammarScore": number between 50 and 100,
-  "correctedSentence": "string or null - corrected version of user input if flawed",
-  "explanationFa": "string or null - short Persian explanation of correction",
+  "correctedSentence": "string or null - corrected version if user input had mistakes",
+  "explanationFa": "string or null - brief Persian explanation of grammar/gender correction",
+  "genderNoteFa": "string - note explaining gender differences (e.g. 'در لهجه عراقی برای خانم‌ها شلونچ و برای آقایان شلونك گفته می‌شود')",
   "betterAlternatives": ["string", "string"],
   "vocabHighlights": [
     { "word": "string", "meaningFa": "string" }
@@ -73,7 +94,7 @@ Output format MUST be strictly JSON adhering to this schema:
 `;
 
     // Construct conversation context
-    let formattedPrompt = `Student Level: ${userLevel || "A2"}\n\n`;
+    let formattedPrompt = `Target Dialect: ${targetDialectName}\nStudent Gender: ${userGenderLabel}\nStudent Level: ${userLevel || "A2"}\n\n`;
     if (history && Array.isArray(history) && history.length > 0) {
       formattedPrompt += "Recent Conversation History:\n";
       for (const item of history.slice(-6)) {
@@ -96,6 +117,7 @@ Output format MUST be strictly JSON adhering to this schema:
             grammarScore: { type: Type.INTEGER },
             correctedSentence: { type: Type.STRING, nullable: true },
             explanationFa: { type: Type.STRING, nullable: true },
+            genderNoteFa: { type: Type.STRING, nullable: true },
             betterAlternatives: {
               type: Type.ARRAY,
               items: { type: Type.STRING },
@@ -131,7 +153,7 @@ Output format MUST be strictly JSON adhering to this schema:
 // AI Smart Dictionary Explanation Endpoint
 app.post("/api/dictionary-explain", async (req, res) => {
   try {
-    const { word, contextSentence } = req.body;
+    const { word, contextSentence, dialect = "en-US", userGender = "masculine" } = req.body;
     if (!word) {
       return res.status(400).json({ error: "Word is required" });
     }
@@ -139,22 +161,24 @@ app.post("/api/dictionary-explain", async (req, res) => {
     const ai = getGeminiClient();
 
     const systemInstruction = `
-You are a master English lexicographer for Persian learners. Provide a deep, insightful dictionary breakdown for the target English word or phrase: "${word}".
-Context sentence if any: "${contextSentence || ""}"
+You are a master lexicographer specializing in Persian, English (US/UK), and local Arabic dialects (Iraqi ar-IQ, Lebanese ar-LB).
+Target Word/Phrase: "${word}".
+Selected Dialect/Language Context: ${dialect}.
+User Gender Context: ${userGender}.
 
 Respond with JSON adhering strictly to:
 {
   "word": "${word}",
-  "phonetic": "string - IPA pronunciation e.g. /kəˈmjuːt/",
+  "phonetic": "string - phonetic pronunciation guide e.g. /kəˈmjuːt/ or Arabic pronunciation e.g. Shlonak / Kifak",
   "partOfSpeech": "string - noun, verb, adjective, adverb, idiom, phrase",
-  "definitionEn": "string - simple clear English definition",
-  "definitionFa": "string - comprehensive Persian meaning with nuances",
-  "usageTipFa": "string - practical advice or common mistake to avoid in Persian",
+  "definitionEn": "string - clear explanation in target language or simple English/Arabic",
+  "definitionFa": "string - comprehensive Persian meaning with cultural/dialect nuances",
+  "usageTipFa": "string - practical advice or common usage in Persian",
+  "genderNoteFa": "string - gender differences if any e.g. (مذکر ♂️: شلونك | مؤنث ♀️: شلونچ)",
   "collocations": ["string", "string", "string"],
   "synonyms": ["string", "string"],
   "antonyms": ["string", "string"],
   "extraExamples": [
-    { "en": "string", "fa": "string" },
     { "en": "string", "fa": "string" },
     { "en": "string", "fa": "string" }
   ]
@@ -163,42 +187,10 @@ Respond with JSON adhering strictly to:
 
     const response = await ai.models.generateContent({
       model: "gemini-3.6-flash",
-      contents: `Explain "${word}" in detail.`,
+      contents: `Explain "${word}" in detail in dialect ${dialect}.`,
       config: {
         systemInstruction,
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            word: { type: Type.STRING },
-            phonetic: { type: Type.STRING },
-            partOfSpeech: { type: Type.STRING },
-            definitionEn: { type: Type.STRING },
-            definitionFa: { type: Type.STRING },
-            usageTipFa: { type: Type.STRING },
-            collocations: { type: Type.ARRAY, items: { type: Type.STRING } },
-            synonyms: { type: Type.ARRAY, items: { type: Type.STRING } },
-            antonyms: { type: Type.ARRAY, items: { type: Type.STRING } },
-            extraExamples: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  en: { type: Type.STRING },
-                  fa: { type: Type.STRING },
-                },
-              },
-            },
-          },
-          required: [
-            "word",
-            "phonetic",
-            "partOfSpeech",
-            "definitionEn",
-            "definitionFa",
-            "extraExamples",
-          ],
-        },
       },
     });
 
@@ -209,7 +201,7 @@ Respond with JSON adhering strictly to:
   } catch (error: any) {
     console.error("Error in /api/dictionary-explain:", error);
     res.status(500).json({
-      error: error.message || "Failed to explain dictionary word.",
+      error: error.message || "Failed to explain word.",
     });
   }
 });
@@ -217,11 +209,13 @@ Respond with JSON adhering strictly to:
 // AI Custom Drill Sentence Generator
 app.post("/api/generate-sentences", async (req, res) => {
   try {
-    const { category, level, topic, count = 3 } = req.body;
+    const { category, level, topic, dialect = "en-US", gender = "masculine", count = 4 } = req.body;
     const ai = getGeminiClient();
 
     const systemInstruction = `
-Generate ${count} natural, highly practical English sentences with Persian translations for language learners.
+Generate ${count} natural, practical sentences with fluent Persian translations for learners.
+Target Dialect: ${dialect} (en-US, en-GB, ar-IQ Iraqi Arabic, ar-LB Lebanese Arabic).
+Gender context: ${gender} (masculine ♂️ or feminine ♀️).
 Category: ${category || "daily_life"}
 CEFR Level: ${level || "A2"}
 Topic Focus: ${topic || "general conversational practice"}
@@ -230,10 +224,11 @@ Return JSON format:
 {
   "sentences": [
     {
-      "en": "string - English sentence",
-      "fa": "string - Persian translation",
-      "grammarPointFa": "string - brief grammar or usage note in Persian",
-      "keyWord": "string - main target word in sentence"
+      "en": "string - sentence in target dialect",
+      "fa": "string - fluent Persian translation",
+      "grammarPointFa": "string - brief grammar or dialect/gender note in Persian",
+      "gender": "string - masculine / feminine / unisex",
+      "keyWord": "string - main target word"
     }
   ]
 }
@@ -241,7 +236,7 @@ Return JSON format:
 
     const response = await ai.models.generateContent({
       model: "gemini-3.6-flash",
-      contents: `Generate ${count} practical sentences for level ${level} in category ${category}.`,
+      contents: `Generate ${count} practical sentences in dialect ${dialect} for gender ${gender}.`,
       config: {
         systemInstruction,
         responseMimeType: "application/json",

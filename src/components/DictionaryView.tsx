@@ -18,12 +18,14 @@ import {
   TOTAL_DICTIONARY_STATS,
   EVERYDAY_PRACTICE_SENTENCES
 } from '../data/dictionaryData';
-import { CategoryType, DictionaryWord, DifficultyLevel } from '../types';
+import { CategoryType, DictionaryWord, DifficultyLevel, DialectType, GenderType } from '../types';
 import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
 import { WordDetailModal } from './WordDetailModal';
 
 interface DictionaryViewProps {
   userLevel: DifficultyLevel;
+  activeDialect?: DialectType;
+  userGender?: GenderType;
   masteredIds: string[];
   bookmarkedIds: string[];
   onToggleBookmark: (id: string) => void;
@@ -32,6 +34,8 @@ interface DictionaryViewProps {
 
 export const DictionaryView: React.FC<DictionaryViewProps> = ({
   userLevel,
+  activeDialect = 'en-US',
+  userGender = 'masculine',
   masteredIds,
   bookmarkedIds,
   onToggleBookmark,
@@ -43,7 +47,7 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({
   const [onlyBookmarked, setOnlyBookmarked] = useState(false);
   const [selectedWordObj, setSelectedWordObj] = useState<DictionaryWord | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<'words' | 'sentences'>('words');
-  const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>('en-US');
+  const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>(activeDialect);
 
   // Filter dictionary words
   const filteredWords = useMemo(() => {
@@ -411,6 +415,8 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({
         onClose={() => setSelectedWordObj(null)}
         isBookmarked={selectedWordObj ? bookmarkedIds.includes(selectedWordObj.id) : false}
         isMastered={selectedWordObj ? masteredIds.includes(selectedWordObj.id) : false}
+        activeDialect={activeDialect}
+        userGender={userGender}
         onToggleBookmark={onToggleBookmark}
         onToggleMastered={onToggleMastered}
       />

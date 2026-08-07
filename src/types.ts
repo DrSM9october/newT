@@ -1,5 +1,8 @@
 export type DifficultyLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
+export type DialectType = 'en-US' | 'en-GB' | 'ar-IQ' | 'ar-LB';
+export type GenderType = 'masculine' | 'feminine' | 'unisex';
+
 export type CategoryType =
   | 'daily_life'
   | 'cafe_food'
@@ -28,9 +31,12 @@ export interface DictionaryWord {
   definitionEn: string;
   category: CategoryType;
   level: DifficultyLevel;
+  dialect?: DialectType;
+  gender?: GenderType;
   examples: {
     en: string;
     fa: string;
+    gender?: GenderType;
   }[];
   synonyms?: string[];
   antonyms?: string[];
@@ -39,6 +45,8 @@ export interface DictionaryWord {
     uk?: string;
     au?: string;
     ca?: string;
+    iq?: string;
+    lb?: string;
   };
   isEssential?: boolean;
   frequencyScore: number; // 1-100
@@ -68,6 +76,8 @@ export interface RoleplayScenario {
   descriptionFa: string;
   category: CategoryType;
   level: DifficultyLevel;
+  dialect?: DialectType;
+  gender?: GenderType;
   icon: string;
   aiPersona: {
     name: string;
@@ -77,7 +87,7 @@ export interface RoleplayScenario {
   };
   objectives: ScenarioObjective[];
   starterMessage: string;
-  usefulPhrases: { en: string; fa: string }[];
+  usefulPhrases: { en: string; fa: string; gender?: GenderType }[];
   keyVocab: string[];
 }
 
@@ -88,6 +98,7 @@ export interface ChatFeedback {
   betterAlternatives?: string[];
   vocabularyTips?: string[];
   persianTranslation: string;
+  genderNoteFa?: string;
 }
 
 export interface ChatMessage {
@@ -98,12 +109,16 @@ export interface ChatMessage {
   timestamp: string;
   feedback?: ChatFeedback;
   audioAvailable?: boolean;
+  dialect?: DialectType;
+  gender?: GenderType;
 }
 
 export interface SentenceExercise {
   id: string;
   category: CategoryType;
   level: DifficultyLevel;
+  dialect?: DialectType;
+  gender?: GenderType;
   type: 'unscramble' | 'fill_blank' | 'listening' | 'translation' | 'multiple_choice';
   sentenceEn: string;
   sentenceFa: string;
@@ -124,6 +139,8 @@ export interface UserProgress {
   completedExercisesCount: number;
   xpPoints: number;
   level: DifficultyLevel;
+  userGender?: GenderType;
+  preferredDialect?: DialectType;
 }
 
 export interface PersonaOption {
@@ -133,4 +150,5 @@ export interface PersonaOption {
   roleDescription: string;
   avatar: string;
   systemInstruction: string;
+  dialect?: DialectType;
 }

@@ -7,18 +7,27 @@ import {
   Globe
 } from 'lucide-react';
 import { EDUCATIONAL_DRILL_EXERCISES } from '../data/exercisesData';
-import { DifficultyLevel } from '../types';
+import { DifficultyLevel, DialectType, GenderType, SentenceExercise } from '../types';
 import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
 
 interface PracticeHubProps {
   userLevel: DifficultyLevel;
+  activeDialect?: DialectType;
+  userGender?: GenderType;
   onIncrementXp: (amount: number) => void;
 }
 
-export const PracticeHub: React.FC<PracticeHubProps> = ({ onIncrementXp }) => {
+export const PracticeHub: React.FC<PracticeHubProps> = ({
+  userLevel,
+  activeDialect = 'en-US',
+  userGender = 'masculine',
+  onIncrementXp,
+}) => {
   const [drillMode, setDrillMode] = useState<'unscramble' | 'fill_blank' | 'listening' | 'flashcard'>('unscramble');
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>('en-US');
+  const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>(activeDialect);
+  const [aiExercises, setAiExercises] = useState<SentenceExercise[]>([]);
+  const [loadingAiSentences, setLoadingAiSentences] = useState(false);
 
   // Unscramble state
   const [selectedWords, setSelectedWords] = useState<string[]>([]);

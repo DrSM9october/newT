@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Volume2, Sparkles, BookOpen, Check, Bookmark, Globe } from 'lucide-react';
-import { DictionaryWord } from '../types';
+import { DictionaryWord, DialectType, GenderType } from '../types';
 import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
 
 interface WordDetailModalProps {
@@ -8,6 +8,8 @@ interface WordDetailModalProps {
   onClose: () => void;
   isBookmarked: boolean;
   isMastered: boolean;
+  activeDialect?: DialectType;
+  userGender?: GenderType;
   onToggleBookmark: (id: string) => void;
   onToggleMastered: (id: string) => void;
 }
@@ -17,19 +19,25 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
   onClose,
   isBookmarked,
   isMastered,
+  activeDialect = 'en-US',
+  userGender = 'masculine',
   onToggleBookmark,
   onToggleMastered,
 }) => {
   const [aiData, setAiData] = useState<any | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
-  const [modalAccent, setModalAccent] = useState<SupportedAccent>('en-US');
+  const [modalAccent, setModalAccent] = useState<SupportedAccent>(activeDialect);
+
+  useEffect(() => {
+    setModalAccent(activeDialect);
+  }, [activeDialect]);
 
   useEffect(() => {
     if (wordObj) {
       setAiData(null);
       fetchAiExplanation(wordObj.word);
     }
-  }, [wordObj]);
+  }, [wordObj, activeDialect, userGender]);
 
   const fetchAiExplanation = async (word: string) => {
     setLoadingAi(true);
@@ -37,7 +45,7 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
       const res = await fetch('/api/dictionary-explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ word }),
+        body: JSON.stringify({ word, dialect: modalAccent, userGender }),
       });
       const data = await res.json();
       if (data.success && data.data) {

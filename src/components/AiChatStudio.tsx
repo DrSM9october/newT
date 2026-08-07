@@ -11,11 +11,13 @@ import {
   Bot,
   Globe
 } from 'lucide-react';
-import { ChatMessage, DifficultyLevel, PersonaOption } from '../types';
+import { ChatMessage, DifficultyLevel, PersonaOption, DialectType, GenderType } from '../types';
 import { speakEnglishText, stopSpeaking, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
 
 interface AiChatStudioProps {
   userLevel: DifficultyLevel;
+  activeDialect?: DialectType;
+  userGender?: GenderType;
   onWordClick?: (word: string) => void;
 }
 
@@ -58,13 +60,17 @@ const PERSONA_OPTIONS: PersonaOption[] = [
   },
 ];
 
-export const AiChatStudio: React.FC<AiChatStudioProps> = ({ userLevel }) => {
+export const AiChatStudio: React.FC<AiChatStudioProps> = ({
+  userLevel,
+  activeDialect = 'en-US',
+  userGender = 'masculine',
+}) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome_msg',
       sender: 'ai',
-      text: `Hello there! 👋 I am Sarah, your AI conversation partner. We can chat about your day, travel, hobbies, or anything you like. I'll also give you instant feedback on your English grammar! How are you feeling today?`,
-      persianText: `سلام! 👋 من سارا هستم، هم صحبت هوشمند تو. می‌تونیم درباره روزت، سفر، سرگرمی‌ها یا هر موضوعی صحبت کنیم. همچنین بهت بازخورد آنی گرامری می‌دم! امروز چطوری؟`,
+      text: `Hello there! 👋 I am Sarah, your AI conversation partner. We can chat in English, local Arabic dialects, or Persian for fluent practice!`,
+      persianText: `سلام! 👋 من سارا هستم، هم‌صحبت هوشمند شما. می‌توانیم به انگلیسی، لهجه‌های عراقی/لبنانی یا فارسی مکالمه روان تمرین کنیم!`,
       timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -74,11 +80,15 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ userLevel }) => {
   const [selectedPersona, setSelectedPersona] = useState<PersonaOption>(PERSONA_OPTIONS[0]);
   const [showTranslations, setShowTranslations] = useState<Record<string, boolean>>({ welcome_msg: true });
   const [speechSpeed, setSpeechSpeed] = useState<number>(1.0);
-  const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>('en-US');
+  const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>(activeDialect);
   const [currentlySpeakingId, setCurrentlySpeakingId] = useState<string | null>(null);
   const [showFeedbackModalId, setShowFeedbackModalId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSelectedAccent(activeDialect);
+  }, [activeDialect]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -109,6 +119,8 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ userLevel }) => {
           history: messages.slice(-8).map((m) => ({ sender: m.sender, text: m.text })),
           personaPrompt: selectedPersona.systemInstruction,
           userLevel,
+          dialect: selectedAccent,
+          userGender,
         }),
       });
 
@@ -128,6 +140,7 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ userLevel }) => {
                       grammarScore: aiData.grammarScore,
                       correctedSentence: aiData.correctedSentence || undefined,
                       explanationFa: aiData.explanationFa || undefined,
+                      genderNoteFa: aiData.genderNoteFa || undefined,
                       betterAlternatives: aiData.betterAlternatives || [],
                       vocabularyTips: aiData.vocabHighlights?.map((v: any) => `${v.word}: ${v.meaningFa}`) || [],
                       persianTranslation: '',
@@ -452,6 +465,11 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ userLevel }) => {
                             {msg.feedback.explanationFa && (
                               <p className="text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
                                 💡 {msg.feedback.explanationFa}
+                              </p>
+                            )}
+                            {msg.feedback.genderNoteFa && (
+                              <p className="text-pink-700 dark:text-pink-300 font-bold mt-1.5 p-1.5 bg-pink-50 dark:bg-pink-950/60 rounded border border-pink-200 dark:border-pink-800 leading-relaxed">
+                                🚻 نکته جنسیت: {msg.feedback.genderNoteFa}
                               </p>
                             )}
                           </div>

@@ -169,5 +169,65 @@ export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
       { en: "Should I turn left at the traffic light?", fa: "باید پشت چراغ راهنمایی به چپ بپیچم؟" },
     ],
     keyVocab: ['Crosswalk', 'Traffic light', 'Turn left', 'Blocks', 'Within walking distance'],
+  },
+  {
+    id: 'iraq_market_bazaar',
+    titleFa: 'خرید و گفت‌وگو در بازار بغداد',
+    titleEn: 'Baghdad Bazaar Shopping (Iraqi Arabic)',
+    descriptionFa: 'تمرین چانه‌زنی، احوالپرسی گرم عراقی و سفارش اجناس با لهجه محلی عراقی 🇮🇶',
+    category: 'shopping',
+    level: 'A2',
+    dialect: 'ar-IQ',
+    icon: 'Store',
+    aiPersona: {
+      name: 'ابو جاسم (Abu Jasim)',
+      role: 'فروشنده گرم و صمیمی بازار بغداد',
+      avatar: '👳‍♂️',
+      systemPrompt:
+        'You are Abu Jasim, a friendly market shopkeeper in Baghdad, Iraq. You speak authentic Iraqi Arabic dialect. Greet the customer with warm Iraqi expressions like "شلونك عيني / شلونچ عيني", "هلا بيك", "نورت المحل". Talk about prices, discount (تنزیل / انطيني مجال), and Iraqi products.',
+    },
+    objectives: [
+      { id: 'o1', titleFa: 'احوالپرسی عراقی (شلونك / شلونچ)', titleEn: 'Iraqi greeting (Shlonak/Shlonich)', completed: false },
+      { id: 'o2', titleFa: 'پرسیدن قیمت جنس (بیژ این؟)', titleEn: 'Ask for item price in Iraqi dialect', completed: false },
+      { id: 'o3', titleFa: 'درخواست تخفیف (انطيني مجال)', titleEn: 'Negotiate price / discount in Iraqi', completed: false },
+    ],
+    starterMessage: "هلا بيك عيني! نورت المحل اليوم. شلونك وشلون الصحة؟ شمحتاج اساعدك؟",
+    usefulPhrases: [
+      { en: "شلونك عيني ابو جاسم؟ (Shlonak aini?)", fa: "چطوری عزیزم ابو جاسم؟ (احوالپرسی عراقی)", gender: "masculine" },
+      { en: "بيش هذا الكيلو اليوم؟ (Bish hada al-kilo?)", fa: "امروز این کیلو چنده؟", gender: "unisex" },
+      { en: "سويلي مجال بالسعر شويه. (Sawili majal bil-si'er)", fa: "یکمی تو قیمت بهم تخفیف بده.", gender: "unisex" },
+      { en: "رح اخذ اثنين، مشكور عيني! (Rah akhod ithnin)", fa: "دوتا برمی‌دارم، ممنونم عزیزم!", gender: "unisex" },
+    ],
+    keyVocab: ['شلونك', 'بيش', 'عيني', 'هسا', 'انطيني مجال', 'مشكور'],
+  },
+  {
+    id: 'lebanon_cafe_beirut',
+    titleFa: 'کافه‌نشینی و صحبت در بیروت',
+    titleEn: 'Beirut Seaside Cafe (Lebanese Arabic)',
+    descriptionFa: 'سفارش قهوه لبنانی، گپ زدن و صمیمیت با لهجه محلی لبنانی 🇱🇧',
+    category: 'cafe_food',
+    level: 'A2',
+    dialect: 'ar-LB',
+    icon: 'Coffee',
+    aiPersona: {
+      name: 'جاد (Jad)',
+      role: 'میزبان خوش‌برخورد کافه ساحلی بیروت',
+      avatar: '🇱🇧',
+      systemPrompt:
+        'You are Jad, a chic and polite host at a seaside cafe in Beirut, Lebanon. You speak fluent Lebanese Arabic dialect. Use expressions like "كيفك يا زلمة / كيفيك حبيبتي", "شو اخبارك", "تكرم عينك", "اهلين وسهلين". Ask what they would like to drink or eat.',
+    },
+    objectives: [
+      { id: 'o1', titleFa: 'احوالپرسی صمیمی لبنانی (كيفك / شو اخبارك)', titleEn: 'Lebanese greeting (Kifak/Sho akhbarak)', completed: false },
+      { id: 'o2', titleFa: 'سفارش قهوه یا صبحانه لبنانی (بدي...)', titleEn: 'Order Lebanese coffee or snack', completed: false },
+      { id: 'o3', titleFa: 'تشکر و استفاده از "تكرم عينك"', titleEn: 'Polite Lebanese exchange', completed: false },
+    ],
+    starterMessage: "اهلين وسهلين! شرفتنا بالكافيه اليوم. كيفك شو اخبارك؟ شو بتحب تشرب هلق؟",
+    usefulPhrases: [
+      { en: "كيفك يا جاد؟ شو اخبارك اليوم؟ (Kifak ya Jad?)", fa: "چطوری جاد؟ امروز چه خبر؟ (لبنانی)", gender: "masculine" },
+      { en: "بدي فنجان قهوة مضبوط من فضلك. (Baddi fnejan qahweh)", fa: "یک فنجان قهوه غلیظ می‌خوام لطفاً.", gender: "unisex" },
+      { en: "قديش الحساب من فضلك؟ (Qaddesh el-hesab?)", fa: "صورت‌حساب چقدر میشه لطفاً؟", gender: "unisex" },
+      { en: "يسلمو ايديك، الكافيه بياخد العقل! (Yislamo ideik)", fa: "دستت درد نکنه، کافه عجیبه و فوق‌العاده‌ست!", gender: "unisex" },
+    ],
+    keyVocab: ['كيفك', 'شو اخبارك', 'بدي', 'هلق', 'تكرم عينك', 'يسلمو ايديك'],
   }
 ];

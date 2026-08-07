@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Theater,
   CheckCircle2,
@@ -11,25 +11,43 @@ import {
   Globe
 } from 'lucide-react';
 import { PRACTICAL_SCENARIOS } from '../data/scenariosData';
-import { ChatMessage, DifficultyLevel, RoleplayScenario } from '../types';
+import { ChatMessage, DifficultyLevel, RoleplayScenario, DialectType, GenderType } from '../types';
 import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
 
 interface ScenarioStudioProps {
   userLevel: DifficultyLevel;
+  activeDialect?: DialectType;
+  userGender?: GenderType;
   onCompleteScenario: (id: string) => void;
 }
 
-export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({ userLevel }) => {
+export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({
+  userLevel,
+  activeDialect = 'en-US',
+  userGender = 'masculine',
+  onCompleteScenario,
+}) => {
   const [activeScenario, setActiveScenario] = useState<RoleplayScenario | null>(null);
   const [scenarioMessages, setScenarioMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [completedObjectives, setCompletedObjectives] = useState<Record<string, boolean>>({});
-  const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>('en-US');
+  const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>(activeDialect);
+
+  useEffect(() => {
+    if (activeScenario?.dialect) {
+      setSelectedAccent(activeScenario.dialect);
+    } else {
+      setSelectedAccent(activeDialect);
+    }
+  }, [activeScenario, activeDialect]);
 
   const startScenario = (sc: RoleplayScenario) => {
     setActiveScenario(sc);
     setCompletedObjectives({});
+    if (sc.dialect) {
+      setSelectedAccent(sc.dialect);
+    }
     setScenarioMessages([
       {
         id: 'sc_start',
@@ -65,6 +83,8 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({ userLevel }) => 
           history: scenarioMessages.slice(-6).map((m) => ({ sender: m.sender, text: m.text })),
           personaPrompt: activeScenario.aiPersona.systemPrompt,
           userLevel,
+          dialect: activeScenario.dialect || selectedAccent,
+          userGender,
         }),
       });
 

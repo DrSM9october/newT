@@ -749,11 +749,197 @@ export const OFFLINE_WORDS_DATABASE: DictionaryWord[] = [
       { en: 'Take the second exit at the roundabout onto Main Street.', fa: 'از خروجی دوم میدان به سمت خیابان اصلی بروید.' },
     ],
     synonyms: ['traffic circle (US)', 'rotary (US)'],
+  },
+  // Iraqi Arabic (ar-IQ)
+  {
+    id: 'w_iq_1',
+    word: 'شلونك / شلونچ (Shlonak / Shlonich)',
+    phonetic: 'Shlo-nak (M) / Shlo-nich (F)',
+    partOfSpeech: 'phrase',
+    persianMeaning: 'حالت چطوره؟ / چطوری؟',
+    definitionEn: 'How are you? (Iraqi Arabic local greeting)',
+    category: 'daily_life',
+    level: 'A1',
+    dialect: 'ar-IQ',
+    gender: 'unisex',
+    isEssential: true,
+    frequencyScore: 99,
+    accentNotes: {
+      iq: 'شلونك (Shlonak) برای مخاطب مرد ♂️ و شلونچ (Shlonich) برای مخاطب زن ♀️ در لهجه عراقی استفاده می‌شود.',
+    },
+    examples: [
+      { en: 'شلونك اخويا؟ (Shlonak akhoya?)', fa: 'حالت چطوره برادرم؟ (خطاب به مرد ♂️)', gender: 'masculine' },
+      { en: 'شلونچ عيني؟ (Shlonich aini?)', fa: 'حالت چطوره عزیزم؟ (خطاب به زن ♀️)', gender: 'feminine' },
+    ],
+  },
+  {
+    id: 'w_iq_2',
+    word: 'دا اسوي (Da Aswi)',
+    phonetic: 'Da As-wi',
+    partOfSpeech: 'phrase',
+    persianMeaning: 'دارم انجام میدم / دارم می‌سازم',
+    definitionEn: 'I am doing / I am making (Iraqi present continuous prefix "دا")',
+    category: 'daily_life',
+    level: 'A2',
+    dialect: 'ar-IQ',
+    gender: 'unisex',
+    isEssential: true,
+    frequencyScore: 95,
+    accentNotes: {
+      iq: 'پیشوند "دا" در لهجه عراقی معادل "دارم ..." در فارسی است.',
+    },
+    examples: [
+      { en: 'شدا تسوي؟ (Shead tswi?)', fa: 'داری چکار می‌کنی؟', gender: 'unisex' },
+      { en: 'دا اسوي چاي عراقي. (Da aswi chai iraqi)', fa: 'دارم چای عراقی درست می‌کنم.', gender: 'unisex' },
+    ],
+  },
+  {
+    id: 'w_iq_3',
+    word: 'فدشي (Fad-Shi)',
+    phonetic: 'Fad-Shee',
+    partOfSpeech: 'idiom',
+    persianMeaning: 'یک چیز فوق‌العاده / محشر / معرکه',
+    definitionEn: 'Something extraordinary / amazing (Iraqi slang)',
+    category: 'idioms_slang',
+    level: 'A2',
+    dialect: 'ar-IQ',
+    gender: 'unisex',
+    isEssential: true,
+    frequencyScore: 92,
+    accentNotes: {
+      iq: 'اصطلاح پرکاربرد عراقی برای توصیف کار یا غذای معرکه (هالاکل فدشي!).',
+    },
+    examples: [
+      { en: 'هذا الأكل فدشي! (Hada al-akl fad-shee)', fa: 'این غذا واقعا محشره!', gender: 'unisex' },
+    ],
+  },
+  {
+    id: 'w_iq_4',
+    word: 'هسا (Hassa)',
+    phonetic: 'Has-sa',
+    partOfSpeech: 'adverb',
+    persianMeaning: 'الان / همین الان',
+    definitionEn: 'Now / Right now (Iraqi Arabic)',
+    category: 'daily_life',
+    level: 'A1',
+    dialect: 'ar-IQ',
+    gender: 'unisex',
+    isEssential: true,
+    frequencyScore: 96,
+    accentNotes: {
+      iq: 'در عراقی "هسا" یعنی الان (معادل الان/حالا در فارسی).',
+    },
+    examples: [
+      { en: 'هسا رايح للمكتب. (Hassa rayeh lil-maktab)', fa: 'همین الان دارم میرم دفتر.', gender: 'masculine' },
+    ],
+  },
+
+  // Lebanese Arabic (ar-LB)
+  {
+    id: 'w_lb_1',
+    word: 'كيفك / كيفيك (Kifak / Kifek)',
+    phonetic: 'Kee-fak (M) / Kee-fek (F)',
+    partOfSpeech: 'phrase',
+    persianMeaning: 'حالت چطوره؟ / چطوری؟',
+    definitionEn: 'How are you? (Lebanese Arabic local greeting)',
+    category: 'daily_life',
+    level: 'A1',
+    dialect: 'ar-LB',
+    gender: 'unisex',
+    isEssential: true,
+    frequencyScore: 99,
+    accentNotes: {
+      lb: 'كيفك (Kifak) برای مردان ♂️ و كيفيك (Kifek) برای زنان ♀️ در لهجه لبنانی استفاده می‌شود.',
+    },
+    examples: [
+      { en: 'كيفك يا زلمة؟ (Kifak ya zalameh?)', fa: 'چطوری مرد؟ (مرد ♂️)', gender: 'masculine' },
+      { en: 'كيفيك اليوم؟ (Kifek el-yowm?)', fa: 'امروز چطوری؟ (زن ♀️)', gender: 'feminine' },
+    ],
+  },
+  {
+    id: 'w_lb_2',
+    word: 'تكرم عينك (Tekram Ainak)',
+    phonetic: 'Tek-ram Ai-nak',
+    partOfSpeech: 'phrase',
+    persianMeaning: 'چشم، به روی چشم / خواهش می‌کنم / با کمال میل',
+    definitionEn: 'You are most welcome / With pleasure (Lebanese customary phrase)',
+    category: 'cafe_food',
+    level: 'A2',
+    dialect: 'ar-LB',
+    gender: 'unisex',
+    isEssential: true,
+    frequencyScore: 94,
+    accentNotes: {
+      lb: 'یکی از زیباترین و محترمانه‌ترین عبارت‌های لبنانی برای پذیرش درخواست یا تشکر.',
+    },
+    examples: [
+      { en: 'ممكن قهوة من فضلك؟ - تكرم عينك! (Momken qahweh min fadlak? - Tekram ainak!)', fa: 'ممکنه یک قهوه لطف کنید؟ - چشم، به روی چشم!', gender: 'unisex' },
+    ],
+  },
+  {
+    id: 'w_lb_3',
+    word: 'شو اخبارك (Sho Akhbarak / Akhbarek)',
+    phonetic: 'Sho Akh-ba-rak',
+    partOfSpeech: 'phrase',
+    persianMeaning: 'چه خبر؟ چه خبرها؟',
+    definitionEn: 'What is your news? What’s up? (Lebanese Arabic)',
+    category: 'daily_life',
+    level: 'A1',
+    dialect: 'ar-LB',
+    gender: 'unisex',
+    isEssential: true,
+    frequencyScore: 97,
+    accentNotes: {
+      lb: 'شو اخبارَك برای آقا ♂️ و شو اخبارِك برای خانم ♀️.',
+    },
+    examples: [
+      { en: 'اهلين! شو اخبارك؟ (Ahlein! Sho akhbarak?)', fa: 'خوش آمدی! چه خبر؟', gender: 'unisex' },
+    ],
+  },
+  {
+    id: 'w_lb_4',
+    word: 'هلق (Hallaq)',
+    phonetic: 'Hal-laq',
+    partOfSpeech: 'adverb',
+    persianMeaning: 'الان / همین حالا',
+    definitionEn: 'Now / Immediately (Lebanese Arabic)',
+    category: 'daily_life',
+    level: 'A1',
+    dialect: 'ar-LB',
+    gender: 'unisex',
+    isEssential: true,
+    frequencyScore: 95,
+    accentNotes: {
+      lb: 'در لهجه لبنانی "هلق" یعنی همین الان.',
+    },
+    examples: [
+      { en: 'رح اوصل هلق. (Rah awsal hallaq)', fa: 'همین الان می‌رسم.', gender: 'unisex' },
+    ],
   }
 ];
 
 // Rich high-frequency practice phrases database across all accents and categories
 export const EVERYDAY_PRACTICE_SENTENCES = [
+  // Iraqi Arabic
+  { en: "شلونك اخويا، اخبارك شنو اليوم؟", fa: "چطوری برادرم، امروزم چه خبر؟ (لهجه عراقی - مذکر ♂️)", category: "daily_life", level: "A1", dialect: "ar-IQ", gender: "masculine" },
+  { en: "شلونچ عيني، ان شاء الله بخير؟", fa: "چطوری عزیزم، ان‌شاءالله خوبی؟ (لهجه عراقی - مؤنث ♀️)", category: "daily_life", level: "A1", dialect: "ar-IQ", gender: "feminine" },
+  { en: "اريد اطلب كباب عراقي ويا چاي حار.", fa: "می‌خوام کباب عراقی با چای داغ سفارش بدم. (لهجه عراقی)", category: "cafe_food", level: "A2", dialect: "ar-IQ", gender: "unisex" },
+  { en: "هسا دا امشي بالشارع ورايح للمطعم.", fa: "همین الان دارم تو خیابون راه میرم و دارم میرم رستوران. (لهجه عراقی)", category: "directions_transport", level: "A2", dialect: "ar-IQ", gender: "masculine" },
+
+  // Lebanese Arabic
+  { en: "كيفك يا زلمة، شو عم تعمل هلق؟", fa: "چطوری مرد، الان داری چکار می‌کنی؟ (لهجه لبنانی - مذکر ♂️)", category: "daily_life", level: "A1", dialect: "ar-LB", gender: "masculine" },
+  { en: "كيفيك حبيبتي، شو اخبارك اليوم؟", fa: "چطوری عزیزم، امروز چه خبر؟ (لهجه لبنانی - مؤنث ♀️)", category: "daily_life", level: "A1", dialect: "ar-LB", gender: "feminine" },
+  { en: "بدي فنجان قهوة مضبوط، تكرم عينك!", fa: "یک فنجان قهوه غلیظ می‌خوام، چشم به روی چشم! (لهجه لبنانی)", category: "cafe_food", level: "A2", dialect: "ar-LB", gender: "unisex" },
+  { en: "رح نتقابل بالمرسة الساعة خمسة.", fa: "ساعت پنج تو اسکله همو می‌بینیم. (لهجه لبنانی)", category: "daily_life", level: "A2", dialect: "ar-LB", gender: "unisex" },
+
+  // American English
+  { en: "Hey buddy, what's up? Are you down to grab a bite later?", fa: "هی رفیق، چه خبر؟ پایه‌ای بعداً بریپ یه چیزی بخوریم؟ (لهجه آمریکایی 🇺🇸)", category: "daily_life", level: "A2", dialect: "en-US", gender: "masculine" },
+  { en: "Girl, you look amazing today! What's the secret?", fa: "دختر، امروز معرکه شدی! رازت چیه؟ (لهجه آمریکایی 🇺🇸)", category: "daily_life", level: "A2", dialect: "en-US", gender: "feminine" },
+
+  // British English
+  { en: "Cheers mate! I am proper knackered after that long shift.", fa: "دمت گرم رفیق! بعد اون شیفت طولانی واقعا له و خسته‌ام. (لهجه بریتانیایی 🇬🇧)", category: "daily_life", level: "B1", dialect: "en-GB", gender: "masculine" },
+  { en: "Lovely to meet you, madam! Would you like a cup of tea?", fa: "از دیدارتون خرسندم سرکار خانم! یک فنجان چای میل دارید؟ (لهجه بریتانیایی 🇬🇧)", category: "daily_life", level: "A2", dialect: "en-GB", gender: "feminine" },
+
   // General & Daily Life
   { en: "Could you please speak a little slower? I am still learning.", fa: "می‌شود لطفاً کمی آرام‌تر صحبت کنید؟ من هنوز در حال یادگیری هستم.", category: "daily_life", level: "A1" },
   { en: "I didn't quite catch that. Could you repeat it once more?", fa: "متوجه نشدم. می‌شود یک بار دیگر تکرار کنید؟", category: "daily_life", level: "A2" },
@@ -798,7 +984,7 @@ export const EVERYDAY_PRACTICE_SENTENCES = [
   { en: "Please call an ambulance immediately!", fa: "لطفاً بلافاصله آمبولانس خبر کنید!", category: "emergency_health", level: "A1" },
 
   // Idioms & Accent Specific Native Expressions
-  { en: "G'day mate, how's it going? (Australian accent greeting)", fa: "روز بخیر رفیق، چطور مطوری؟ (درود بومی استرالیایی)", category: "idioms_slang", level: "A2" },
+  { en: "G'day mate, how's it going?", fa: "روز بخیر رفیق، چطور مطوری؟", category: "idioms_slang", level: "A2" },
   { en: "I'm absolutely chuffed with the exam results! (British slang)", fa: "از نتایج امتحان کلاً ذوق‌زده و کیف‌ورم! (اصطلاح بریتانیایی)", category: "idioms_slang", level: "B2" },
   { en: "Don't sweat it, everything will turn out fine! (American slang)", fa: "اصلا نگرانش نباش و به خودت سخت نگیر، همه‌چی درست میشه! (اصطلاح آمریکایی)", category: "idioms_slang", level: "A2" },
   { en: "Let's call it a day and grab some food. (Idiom)", fa: "بیا کار رو واسه امروز تعطیل کنیم و بریم یه چیزی بخوریم.", category: "idioms_slang", level: "B1" },

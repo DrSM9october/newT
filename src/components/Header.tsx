@@ -10,16 +10,22 @@ import {
   BookMarked,
   Sun,
   Moon,
-  Globe
+  Globe,
+  UserCheck
 } from 'lucide-react';
-import { DifficultyLevel } from '../types';
+import { DifficultyLevel, DialectType, GenderType } from '../types';
 import { TOTAL_DICTIONARY_STATS } from '../data/dictionaryData';
+import { ACCENT_CONFIGS } from '../lib/speech';
 
 interface HeaderProps {
   activeTab: 'chat' | 'dictionary' | 'scenarios' | 'drills' | 'progress';
   setActiveTab: (tab: 'chat' | 'dictionary' | 'scenarios' | 'drills' | 'progress') => void;
   userLevel: DifficultyLevel;
   setUserLevel: (level: DifficultyLevel) => void;
+  activeDialect: DialectType;
+  setActiveDialect: (dialect: DialectType) => void;
+  userGender: GenderType;
+  setUserGender: (gender: GenderType) => void;
   streak: number;
   masteredCount: number;
   darkMode: boolean;
@@ -31,6 +37,10 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   userLevel,
   setUserLevel,
+  activeDialect,
+  setActiveDialect,
+  userGender,
+  setUserGender,
   streak,
   masteredCount,
   darkMode,
@@ -43,31 +53,48 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Top Stat Banner */}
       <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white py-1.5 px-4 text-xs md:text-sm border-b border-indigo-900/50">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center space-x-3 space-x-reverse font-medium">
-            <span className="bg-indigo-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-indigo-400/30 text-indigo-300">
+          <div className="flex flex-wrap items-center gap-2 font-medium">
+            <span className="bg-indigo-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-indigo-400/30 text-indigo-300 text-xs">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              دیتابیس لهجه‌ها و اصطلاحات
+              لهجه و جنسیت مکالمه
             </span>
-            <span className="hidden sm:inline text-slate-500">|</span>
-            <span className="flex items-center gap-1 font-semibold text-slate-200">
-              <BookOpen className="w-3.5 h-3.5 text-indigo-400 inline" />
-              {TOTAL_DICTIONARY_STATS.totalWords.toLocaleString('fa-IR')}+ کلمه و اصطلاح
-            </span>
-            <span className="text-slate-500">•</span>
-            <span className="flex items-center gap-1 font-semibold text-slate-200">
-              <Globe className="w-3.5 h-3.5 text-indigo-400 inline" />
-              لهجه‌های آمریکایی (US) و بریتانیایی (UK)
-            </span>
+            
+            {/* Dialect Selector */}
+            <div className="flex items-center gap-1 bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-700">
+              <Globe className="w-3.5 h-3.5 text-indigo-400" />
+              <select
+                value={activeDialect}
+                onChange={(e) => setActiveDialect(e.target.value as DialectType)}
+                className="bg-transparent text-white text-xs font-bold focus:outline-none cursor-pointer"
+              >
+                {ACCENT_CONFIGS.map((acc) => (
+                  <option key={acc.code} value={acc.code} className="bg-slate-900 text-white">
+                    {acc.flag} {acc.labelFa}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Gender Selector */}
+            <div className="flex items-center gap-1 bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-700">
+              <UserCheck className="w-3.5 h-3.5 text-pink-400" />
+              <button
+                onClick={() => setUserGender(userGender === 'masculine' ? 'feminine' : 'masculine')}
+                className="text-xs font-bold text-slate-200 hover:text-white transition-colors"
+              >
+                جنسیت: {userGender === 'masculine' ? '♂️ آقایان (مذکر)' : '♀️ بانوان (مؤنث)'}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center space-x-4 space-x-reverse">
             <div className="flex items-center gap-1 bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-full text-amber-200 font-bold">
               <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
-              <span>{streak} روز زنجیره یادگیری</span>
+              <span>{streak} روز زنجیره</span>
             </div>
             <div className="hidden md:flex items-center gap-1 text-indigo-200">
               <BookMarked className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{masteredCount} کلمه مسلط شده</span>
+              <span>{masteredCount} کلمه مسلط</span>
             </div>
           </div>
         </div>
@@ -85,10 +112,10 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">LinguaAI</h1>
                 <span className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold px-1.5 py-0.5 rounded border border-indigo-300 dark:border-indigo-800">
-                  نسخه ۳٫۶
+                  چندلهجه‌ای
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">دستیار هوشمند مکالمه و لهجه‌های انگلیسی</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">آموزش مکالمه روان به فارسی و لهجه‌های بومی</p>
             </div>
           </div>
 
