@@ -35,9 +35,9 @@ jobs:
       - name: Setup Capacitor Android Platform
         run: |
           if [ ! -d "android" ]; then
-            npx cap add android || true
+            npx @capacitor/cli add android || npx cap add android || true
           fi
-          npx cap sync android
+          npx @capacitor/cli sync android || npx cap sync android
 
       - name: Grant Execute Permission for Gradle Wrapper
         run: |
