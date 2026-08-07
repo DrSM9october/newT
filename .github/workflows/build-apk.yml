@@ -1,0 +1,83 @@
+name: Build Android APK (LinguaAI)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build & Package Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Build Web Application
+        run: npm run build
+
+      - name: Add Android Platform (if missing) & Sync Capacitor
+        run: |
+          if [ ! -d "android" ]; then
+            echo "Adding Android platform to Capacitor..."
+            npx cap add android
+          fi
+          echo "Syncing Capacitor web assets to Android project..."
+          npx cap sync android
+
+      - name: Copy App Icon to Android Resources (if generated)
+        run: |
+          ICON_SRC=$(find src/assets/images/ -name "app_icon*.jpg" -o -name "app_icon*.png" | head -n 1)
+          if [ -n "$ICON_SRC" ] && [ -d "android/app/src/main/res" ]; then
+            echo "Found generated icon: $ICON_SRC, applying to Android project..."
+            mkdir -p android/app/src/main/res/mipmap-xxxhdpi/
+            cp "$ICON_SRC" android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+            cp "$ICON_SRC" android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+          fi
+
+      - name: Grant Execute Permission for Gradle Wrapper
+        run: chmod +x android/gradlew
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Build Unsigned Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon --stacktrace || true
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LinguaAI-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Upload Release APK Artifact (if available)
+        uses: actions/upload-artifact@v4
+        with:
+          name: LinguaAI-Release-Unsigned-APK
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: ignore
+          retention-days: 30
