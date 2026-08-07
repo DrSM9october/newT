@@ -1,0 +1,6 @@
+{
+  "name": "LinguaAI Persian - دستیار هوشمند مکالمه و زبان",
+  "description": "اپلیکیشن هوشمند آموزش زبان انگلیسی و مکالمه تعاملی همراه با هوش مصنوعی، دیکشنری کاربردی با آمار واقعی کلمات و جملات، سناریوهای روزمره و تمرینات متنوع.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

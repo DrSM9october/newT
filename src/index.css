@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+.font-sans {
+  font-family: 'Plus Jakarta Sans', 'Vazirmatn', sans-serif;
+}
+
+/* Custom hide scrollbars for sliders */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
