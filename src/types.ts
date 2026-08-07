@@ -74,6 +74,7 @@ export interface RoleplayScenario {
     name: string;
     role: string;
     avatar: string;
+    gender?: 'male' | 'female';
     systemPrompt: string;
     mood?: PersonaMood;
   };

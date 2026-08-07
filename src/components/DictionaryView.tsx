@@ -68,10 +68,10 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({ activeDialect })
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
       {/* Search Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 space-y-4 shadow-xs">
         <div className="flex items-center gap-2">
-          <BookOpen className="w-6 h-6 text-indigo-400" />
-          <h2 className="text-xl font-black text-white">دیکشنری هوشمند و تحلیل ریشه‌ای واژگان</h2>
+          <BookOpen className="w-6 h-6 text-indigo-600" />
+          <h2 className="text-xl font-black text-slate-900">دیکشنری هوشمند و تحلیل ریشه‌ای واژگان</h2>
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -82,14 +82,14 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({ activeDialect })
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="جستجوی کلمه انگلیسی یا ترجمه فارسی..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-2xl pr-12 pl-4 py-3 text-sm text-slate-100 focus:outline-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl pr-12 pl-4 py-3 text-sm text-slate-800 focus:outline-none placeholder-slate-400"
             />
           </div>
 
           <button
             onClick={handleAiLookup}
             disabled={!searchTerm.trim() || aiLoading}
-            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold px-5 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-600/30 whitespace-nowrap"
+            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold px-5 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-indigo-600/20 whitespace-nowrap"
           >
             <Sparkles className="w-4 h-4" />
             <span>تحلیل هوشمند کلمه با جمینای</span>
@@ -105,42 +105,42 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({ activeDialect })
             <div
               key={item.id}
               onClick={() => setSelectedWord(item)}
-              className="bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-2xl p-4 transition-all cursor-pointer space-y-3 group flex flex-col justify-between"
+              className="bg-white border border-slate-200/80 hover:border-indigo-400 rounded-2xl p-4.5 transition-all cursor-pointer space-y-3 group flex flex-col justify-between shadow-xs hover:shadow-md"
             >
               <div className="space-y-2">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="text-lg font-black text-white group-hover:text-indigo-300 transition-colors">
+                    <h3 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors" dir="ltr" style={{ textAlign: 'left' }}>
                       {item.word}
                     </h3>
-                    <p className="text-xs text-slate-400 font-mono mt-0.5">{item.phonetic}</p>
+                    <p className="text-xs text-slate-500 font-mono mt-0.5" dir="ltr" style={{ textAlign: 'left' }}>{item.phonetic}</p>
                   </div>
 
                   <button
                     onClick={(e) => handleToggleBookmark(item.id, e)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 transition-colors"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-amber-500 transition-colors"
                   >
                     {isBookmarked ? (
-                      <BookmarkCheck className="w-5 h-5 text-amber-400 fill-amber-400/20" />
+                      <BookmarkCheck className="w-5 h-5 text-amber-500 fill-amber-500/20" />
                     ) : (
                       <Bookmark className="w-5 h-5" />
                     )}
                   </button>
                 </div>
 
-                <p className="text-sm font-bold text-slate-200">{item.meaningFa}</p>
+                <p className="text-sm font-bold text-slate-800">{item.meaningFa}</p>
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
-                <span className="text-indigo-400 font-bold">{item.partOfSpeech}</span>
+              <div className="flex items-center justify-between pt-2.5 border-t border-slate-200 text-xs">
+                <span className="text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">{item.partOfSpeech}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     speakEnglishText(item.word, 1.0, activeDialect as any);
                   }}
-                  className="flex items-center gap-1 text-slate-400 hover:text-white p-1"
+                  className="flex items-center gap-1 text-slate-600 hover:text-indigo-600 p-1 font-bold"
                 >
-                  <Volume2 className="w-4 h-4" />
+                  <Volume2 className="w-4 h-4 text-indigo-600" />
                   <span>تلفظ</span>
                 </button>
               </div>

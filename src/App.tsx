@@ -12,7 +12,7 @@ export function App() {
   const [activeDialect, setActiveDialect] = useState<DialectType>('en-US');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}

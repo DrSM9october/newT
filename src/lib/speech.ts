@@ -21,7 +21,8 @@ export function speakEnglishText(
   text: string,
   rate: number = 1.0,
   accent: SupportedAccent = 'en-US',
-  pitch: number = 1.0
+  pitch: number = 1.0,
+  gender: 'male' | 'female' = 'female'
 ): Promise<void> {
   return new Promise((resolve) => {
     if (!text || !text.trim()) {
@@ -102,19 +103,59 @@ export function speakEnglishText(
         const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.lang = langCode;
         utterance.rate = rate;
-        utterance.pitch = pitch;
+
+        // Calculate gender-appropriate pitch
+        if (gender === 'male') {
+          utterance.pitch = Math.max(0.7, Math.min(pitch * 0.85, 0.95));
+        } else {
+          utterance.pitch = Math.min(1.3, Math.max(pitch * 1.05, 1.0));
+        }
 
         (window as any)._activeUtteranceRef = utterance;
 
         const voices = window.speechSynthesis.getVoices();
-        const prefix = accent.slice(0, 2);
-        const exactVoice = voices.find((v) => v.lang === accent || v.lang.replace('_', '-') === accent);
-        const langVoice = voices.find((v) => v.lang.startsWith(prefix));
+        const prefix = langCode.slice(0, 2);
 
-        if (exactVoice) {
-          utterance.voice = exactVoice;
-        } else if (langVoice) {
-          utterance.voice = langVoice;
+        // Language matching voices
+        const matchingLangVoices = voices.filter(
+          (v) =>
+            v.lang === langCode ||
+            v.lang.replace('_', '-') === langCode ||
+            v.lang.startsWith(prefix)
+        );
+
+        const MALE_KEYWORDS = [
+          'male', 'david', 'mark', 'george', 'daniel', 'james', 'richard',
+          'alex', 'brian', 'ryan', 'guy', 'stefan', 'maged', 'naayf', 'shakir',
+          'tarik', 'thomas', 'oliver', 'paul', 'rishi', 'fred', 'dylan', 'john',
+          'mike', 'steven', 'tom', 'sam', 'male'
+        ];
+
+        const FEMALE_KEYWORDS = [
+          'female', 'zira', 'samantha', 'victoria', 'karen', 'mona', 'salma',
+          'laila', 'hazel', 'jenny', 'aria', 'sonia', 'emma', 'susan', 'fiona',
+          'veena', 'female'
+        ];
+
+        let selectedVoice: SpeechSynthesisVoice | undefined;
+
+        if (gender === 'male') {
+          selectedVoice = matchingLangVoices.find((v) =>
+            MALE_KEYWORDS.some((kw) => v.name.toLowerCase().includes(kw))
+          );
+        } else {
+          selectedVoice = matchingLangVoices.find((v) =>
+            FEMALE_KEYWORDS.some((kw) => v.name.toLowerCase().includes(kw))
+          );
+        }
+
+        // Fallback to first matching lang voice if specific gender voice not named explicitly
+        if (!selectedVoice && matchingLangVoices.length > 0) {
+          selectedVoice = matchingLangVoices[0];
+        }
+
+        if (selectedVoice) {
+          utterance.voice = selectedVoice;
         }
 
         let hasResolved = false;
@@ -138,7 +179,7 @@ export function speakEnglishText(
           safeResolve();
         };
 
-        utterance.onerror = (evt) => {
+        utterance.onerror = () => {
           clearTimeout(timeoutId);
           playAudioFallback();
         };
