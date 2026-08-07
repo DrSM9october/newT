@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
+import { NetworkStatusBanner } from './components/NetworkStatusBanner';
 import { AiChatStudio } from './components/AiChatStudio';
 import { DictionaryView } from './components/DictionaryView';
 import { ScenarioStudio } from './components/ScenarioStudio';
@@ -13,6 +14,7 @@ export default function App() {
   const [activeDialect, setActiveDialect] = useState<DialectType>('en-US');
   const [userGender, setUserGender] = useState<GenderType>('masculine');
   const [darkMode, setDarkMode] = useState<boolean>(false);
+  const [forcedOfflineMode, setForcedOfflineMode] = useState<boolean>(false);
 
   // User progress state with localStorage backup
   const [progress, setProgress] = useState<UserProgress>(() => {
@@ -113,6 +115,12 @@ export default function App() {
         setDarkMode={setDarkMode}
       />
 
+      {/* Connection & Offline Status Banner */}
+      <NetworkStatusBanner
+        forcedOfflineMode={forcedOfflineMode}
+        onToggleForcedOffline={setForcedOfflineMode}
+      />
+
       {/* Main View Router */}
       <main className="pb-12">
         {activeTab === 'chat' && (
@@ -120,6 +128,7 @@ export default function App() {
             userLevel={userLevel}
             activeDialect={activeDialect}
             userGender={userGender}
+            forcedOfflineMode={forcedOfflineMode}
           />
         )}
 

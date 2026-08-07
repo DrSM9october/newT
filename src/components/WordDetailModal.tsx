@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Volume2, Sparkles, BookOpen, Check, Bookmark, Globe } from 'lucide-react';
+import { X, Volume2, Sparkles, BookOpen, Check, Bookmark, Globe, Edit3, Save } from 'lucide-react';
 import { DictionaryWord, DialectType, GenderType } from '../types';
 import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
+import { getStoredNotes, saveWordNote } from '../lib/offlineStorage';
+import { buildOfflineDetailedWordCard } from '../lib/offlineAnalyzer';
 
 interface WordDetailModalProps {
   wordObj: DictionaryWord | null;
@@ -27,6 +29,10 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
   const [aiData, setAiData] = useState<any | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
   const [modalAccent, setModalAccent] = useState<SupportedAccent>(activeDialect);
+  
+  // Offline Personal Note State
+  const [personalNote, setPersonalNote] = useState<string>('');
+  const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
 
   useEffect(() => {
     setModalAccent(activeDialect);
@@ -36,8 +42,19 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
     if (wordObj) {
       setAiData(null);
       fetchAiExplanation(wordObj.word);
+
+      // Load stored offline personal note
+      const storedNotes = getStoredNotes();
+      setPersonalNote(storedNotes[wordObj.id] || '');
+      setIsEditingNote(false);
     }
   }, [wordObj, activeDialect, userGender]);
+
+  const handleSaveNote = () => {
+    if (!wordObj) return;
+    saveWordNote(wordObj.id, personalNote);
+    setIsEditingNote(false);
+  };
 
   const fetchAiExplanation = async (word: string) => {
     setLoadingAi(true);
@@ -50,9 +67,31 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
       const data = await res.json();
       if (data.success && data.data) {
         setAiData(data.data);
+      } else {
+        throw new Error('Fallback to local offline engine');
       }
     } catch (e) {
-      console.error('Failed to fetch AI explanation', e);
+      // Offline Local Fallback for deep word analysis
+      const offlineCard = buildOfflineDetailedWordCard(word);
+      setAiData({
+        usageTipFa: `تحلیل محلی آفلاین: واژه "${word}" از ریشه کاربردی زبان انگلیسی با ساختار شیوای تلفظ و کاربرد در مکالمات روزمره است.`,
+        collocations: [
+          `use ${word} in context`,
+          `common ${word}`,
+          `${word} sentence`,
+          `practical ${word}`,
+        ],
+        extraExamples: [
+          {
+            en: `It is essential to understand how "${word}" behaves in natural conversations.`,
+            fa: `فهم نحوه استفاده از "${word}" در مکالمات طبیعی بسیار ضروری است.`,
+          },
+          {
+            en: `She explained the nuance of "${word}" very clearly.`,
+            fa: `او ظرافت‌های استفاده از "${word}" را بسیار شفاف توضیح داد.`,
+          },
+        ],
+      });
     } finally {
       setLoadingAi(false);
     }
@@ -197,6 +236,48 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Personal Offline Notes Section */}
+        <div className="my-5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-2xl p-4 text-xs space-y-2">
+          <div className="flex items-center justify-between font-bold text-amber-900 dark:text-amber-200">
+            <span className="flex items-center gap-1.5">
+              <Edit3 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              یادداشت شخصی و مانیفست آفلاین (ذخیره محلی):
+            </span>
+            {isEditingNote ? (
+              <button
+                onClick={handleSaveNote}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1 rounded-lg flex items-center gap-1 transition-all"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>ذخیره یادداشت</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsEditingNote(true)}
+                className="text-amber-700 dark:text-amber-300 hover:underline font-bold"
+              >
+                {personalNote ? 'ویرایش یادداشت' : 'افزودن یادداشت جدید'}
+              </button>
+            )}
+          </div>
+
+          {isEditingNote ? (
+            <textarea
+              value={personalNote}
+              onChange={(e) => setPersonalNote(e.target.value)}
+              placeholder="نکته شخصی، یادآور یا مثال‌های اختصاصی خود را در اینجا بنویسید (به‌طور آفلاین در دستگاه شما ذخیره می‌شود)..."
+              rows={3}
+              className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl p-3 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 font-sans"
+            />
+          ) : personalNote ? (
+            <p className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-xl border border-amber-200 dark:border-amber-800 text-slate-800 dark:text-slate-200 font-sans leading-relaxed">
+              "{personalNote}"
+            </p>
+          ) : (
+            <p className="text-slate-400 italic">هنوز یادداشتی برای این کلمه ثبت نکرده‌اید.</p>
+          )}
         </div>
 
         {/* AI Deep Explanation Section */}

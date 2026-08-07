@@ -23,12 +23,14 @@ import {
   startSpeechRecognition,
   generateOfflineReply
 } from '../lib/speech';
+import { analyzeSentenceOffline } from '../lib/offlineAnalyzer';
 
 interface AiChatStudioProps {
   userLevel: DifficultyLevel;
   activeDialect?: DialectType;
   userGender?: GenderType;
   onWordClick?: (word: string) => void;
+  forcedOfflineMode?: boolean;
 }
 
 const PERSONA_OPTIONS: PersonaOption[] = [
@@ -74,6 +76,7 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
   userLevel,
   activeDialect = 'en-US',
   userGender = 'masculine',
+  forcedOfflineMode = false,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -162,6 +165,47 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
     if (!customText) setInput('');
     setLoading(true);
 
+    if (forcedOfflineMode || !navigator.onLine) {
+      // Direct Local Offline Analysis without network call
+      setTimeout(() => {
+        const offlineAnalysis = analyzeSentenceOffline(textToSend, selectedAccent, userGender as GenderType);
+        const offlineReply = generateOfflineReply(textToSend, selectedAccent, userGender as GenderType);
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === userMsgId
+              ? {
+                  ...m,
+                  feedback: {
+                    grammarScore: offlineAnalysis.grammarScore,
+                    correctedSentence: offlineAnalysis.correctedSentence,
+                    explanationFa: `${offlineAnalysis.explanationFa} (${offlineAnalysis.detectedTenseFa})`,
+                    genderNoteFa: offlineAnalysis.genderNoteFa,
+                    betterAlternatives: offlineAnalysis.betterAlternatives,
+                    vocabularyTips: offlineAnalysis.keyVocabulary.map((v) => `${v.word}: ${v.meaningFa}`),
+                    persianTranslation: offlineAnalysis.persianTranslation,
+                  },
+                }
+              : m
+          )
+        );
+
+        const aiMsgId = `ai_offline_${Date.now()}`;
+        const aiMsg: ChatMessage = {
+          id: aiMsgId,
+          sender: 'ai',
+          text: offlineReply.replyEn,
+          persianText: offlineReply.replyFa,
+          timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        setMessages((prev) => [...prev, aiMsg]);
+        speakText(aiMsg.id, aiMsg.text);
+        setLoading(false);
+      }, 400);
+      return;
+    }
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -222,7 +266,8 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
     } catch (err: any) {
       console.warn('Network or API issue, triggering Offline Fallback Engine:', err);
       // Fallback Engine for Offline / Disconnected Mode
-      const offlineResult = generateOfflineReply(textToSend, selectedAccent, userGender);
+      const offlineAnalysis = analyzeSentenceOffline(textToSend, selectedAccent, userGender as GenderType);
+      const offlineResult = generateOfflineReply(textToSend, selectedAccent, userGender as GenderType);
       
       setMessages((prev) =>
         prev.map((m) =>
@@ -230,12 +275,13 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
             ? {
                 ...m,
                 feedback: {
-                  grammarScore: 90,
-                  explanationFa: offlineResult.explanationFa,
-                  genderNoteFa: offlineResult.genderNoteFa,
-                  betterAlternatives: [],
-                  vocabularyTips: [],
-                  persianTranslation: offlineResult.replyFa,
+                  grammarScore: offlineAnalysis.grammarScore,
+                  correctedSentence: offlineAnalysis.correctedSentence,
+                  explanationFa: offlineAnalysis.explanationFa,
+                  genderNoteFa: offlineAnalysis.genderNoteFa,
+                  betterAlternatives: offlineAnalysis.betterAlternatives,
+                  vocabularyTips: offlineAnalysis.keyVocabulary.map((v) => `${v.word}: ${v.meaningFa}`),
+                  persianTranslation: offlineAnalysis.persianTranslation,
                 },
               }
             : m
