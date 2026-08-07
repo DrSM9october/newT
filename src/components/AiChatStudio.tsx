@@ -166,140 +166,45 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({
     if (!customText) setInput('');
     setLoading(true);
 
-    if (forcedOfflineMode || !navigator.onLine) {
-      // Direct Local Offline Analysis without network call
-      setTimeout(() => {
-        const offlineAnalysis = analyzeSentenceOffline(textToSend, selectedAccent, userGender as GenderType);
-        const offlineReply = generateOfflineReply(textToSend, selectedAccent, userGender as GenderType);
+    try {
+      const res = await aiManager.chat(
+        {
+          text: textToSend,
+          history: messages,
+          personaId: selectedPersona.id,
+          dialect: selectedAccent,
+          gender: userGender as GenderType,
+          level: userLevel,
+        },
+        forcedOfflineMode
+      );
 
+      if (res.feedback) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === userMsgId
               ? {
                   ...m,
-                  feedback: {
-                    grammarScore: offlineAnalysis.grammarScore,
-                    correctedSentence: offlineAnalysis.correctedSentence,
-                    explanationFa: `${offlineAnalysis.explanationFa} (${offlineAnalysis.detectedTenseFa})`,
-                    genderNoteFa: offlineAnalysis.genderNoteFa,
-                    betterAlternatives: offlineAnalysis.betterAlternatives,
-                    vocabularyTips: offlineAnalysis.keyVocabulary.map((v) => `${v.word}: ${v.meaningFa}`),
-                    persianTranslation: offlineAnalysis.persianTranslation,
-                  },
+                  feedback: res.feedback,
                 }
               : m
           )
         );
-
-        const aiMsgId = `ai_offline_${Date.now()}`;
-        const aiMsg: ChatMessage = {
-          id: aiMsgId,
-          sender: 'ai',
-          text: offlineReply.replyEn,
-          persianText: offlineReply.replyFa,
-          timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
-        };
-
-        setMessages((prev) => [...prev, aiMsg]);
-        speakText(aiMsg.id, aiMsg.text);
-        setLoading(false);
-      }, 400);
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: textToSend,
-          history: messages.slice(-8).map((m) => ({ sender: m.sender, text: m.text })),
-          personaPrompt: selectedPersona.systemInstruction,
-          userLevel,
-          dialect: selectedAccent,
-          userGender,
-        }),
-      });
-
-      const resData = await response.json();
-
-      if (resData.success && resData.data) {
-        const aiData = resData.data;
-
-        // Update user message with feedback if present
-        if (aiData.grammarScore !== undefined) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === userMsgId
-                ? {
-                    ...m,
-                    feedback: {
-                      grammarScore: aiData.grammarScore,
-                      correctedSentence: aiData.correctedSentence || undefined,
-                      explanationFa: aiData.explanationFa || undefined,
-                      genderNoteFa: aiData.genderNoteFa || undefined,
-                      betterAlternatives: aiData.betterAlternatives || [],
-                      vocabularyTips: aiData.vocabHighlights?.map((v: any) => `${v.word}: ${v.meaningFa}`) || [],
-                      persianTranslation: '',
-                    },
-                  }
-                : m
-            )
-          );
-        }
-
-        const aiMsgId = `ai_${Date.now()}`;
-        const aiMsg: ChatMessage = {
-          id: aiMsgId,
-          sender: 'ai',
-          text: aiData.replyEn || 'I am listening!',
-          persianText: aiData.replyFa,
-          timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
-        };
-
-        setMessages((prev) => [...prev, aiMsg]);
-
-        // Auto read aloud AI response
-        speakText(aiMsg.id, aiMsg.text);
-      } else {
-        throw new Error(resData.error || 'خطا در ارتباط آنلاین');
       }
-    } catch (err: any) {
-      console.warn('Network or API issue, triggering Offline Fallback Engine:', err);
-      // Fallback Engine for Offline / Disconnected Mode
-      const offlineAnalysis = analyzeSentenceOffline(textToSend, selectedAccent, userGender as GenderType);
-      const offlineResult = generateOfflineReply(textToSend, selectedAccent, userGender as GenderType);
-      
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === userMsgId
-            ? {
-                ...m,
-                feedback: {
-                  grammarScore: offlineAnalysis.grammarScore,
-                  correctedSentence: offlineAnalysis.correctedSentence,
-                  explanationFa: offlineAnalysis.explanationFa,
-                  genderNoteFa: offlineAnalysis.genderNoteFa,
-                  betterAlternatives: offlineAnalysis.betterAlternatives,
-                  vocabularyTips: offlineAnalysis.keyVocabulary.map((v) => `${v.word}: ${v.meaningFa}`),
-                  persianTranslation: offlineAnalysis.persianTranslation,
-                },
-              }
-            : m
-        )
-      );
 
-      const aiMsgId = `ai_offline_${Date.now()}`;
+      const aiMsgId = `ai_${Date.now()}`;
       const aiMsg: ChatMessage = {
         id: aiMsgId,
         sender: 'ai',
-        text: offlineResult.replyEn,
-        persianText: offlineResult.replyFa,
+        text: res.replyEn,
+        persianText: res.replyFa,
         timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
       };
 
       setMessages((prev) => [...prev, aiMsg]);
       speakText(aiMsg.id, aiMsg.text);
+    } catch (err: any) {
+      console.error('Chat error:', err);
     } finally {
       setLoading(false);
     }

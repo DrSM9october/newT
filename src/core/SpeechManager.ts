@@ -11,8 +11,8 @@ export interface SpeechRecognitionResult {
 export class SpeechManager {
   private isListening: boolean = false;
 
-  public async speak(text: string, accent: SupportedAccent = 'en-US'): Promise<void> {
-    speakEnglishText(text, accent);
+  public async speak(text: string, accent: SupportedAccent = 'en-US', rate: number = 1.0): Promise<void> {
+    return speakEnglishText(text, rate, accent);
   }
 
   public isSpeechRecognitionSupported(): boolean {
