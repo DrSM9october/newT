@@ -13,15 +13,49 @@ export function App() {
   const [activeDialect, setActiveDialect] = useState<DialectType>('en-US');
 
   useEffect(() => {
+    // Initial state setup if hash present
+    const hash = window.location.hash.replace('#', '');
+    if (['chat', 'dictionary', 'scenarios', 'practice', 'progress'].includes(hash)) {
+      setActiveTab(hash as any);
+    } else {
+      window.history.replaceState({ tab: 'chat' }, '', '#chat');
+    }
+
     const handlePopState = (e: PopStateEvent) => {
       stopSpeech();
       if (e.state && e.state.tab) {
         setActiveTab(e.state.tab);
+      } else {
+        const h = window.location.hash.replace('#', '');
+        if (['chat', 'dictionary', 'scenarios', 'practice', 'progress'].includes(h)) {
+          setActiveTab(h as any);
+        }
       }
     };
 
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+
+    let appBackButtonListener: { remove: () => void } | null = null;
+    if (typeof window !== 'undefined' && (window as any).Capacitor) {
+      import('@capacitor/app').then(({ App: CapApp }) => {
+        CapApp.addListener('backButton', ({ canGoBack }) => {
+          if (window.history.length > 1 && canGoBack) {
+            window.history.back();
+          } else {
+            CapApp.exitApp();
+          }
+        }).then((listener) => {
+          appBackButtonListener = listener;
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (appBackButtonListener && typeof appBackButtonListener.remove === 'function') {
+        appBackButtonListener.remove();
+      }
+    };
   }, []);
 
   const handleTabSelect = (tab: 'chat' | 'dictionary' | 'scenarios' | 'practice' | 'progress') => {
