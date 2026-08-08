@@ -68,7 +68,20 @@ export function analyzeOfflineMessage(
   let replyEn = '';
   let replyFa = '';
 
-  if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
+  // Contextual Scenario Keywords Detection (for seamless offline AI roleplay)
+  if (lower.includes('coffee') || lower.includes('latte') || lower.includes('milk') || lower.includes('muffin') || lower.includes('order')) {
+    replyEn = `Got it! One ${cleanInput.includes('latte') ? 'iced latte' : 'fresh coffee'} coming right up for you. Would you like anything else with that?`;
+    replyFa = `حتماً! یک قهوه تازه برای شما آماده می‌کنم. آیا چیز دیگری همراه آن میل دارید؟`;
+  } else if (lower.includes('passport') || lower.includes('visit') || lower.includes('stay') || lower.includes('hotel') || lower.includes('tourism')) {
+    replyEn = `Thank you. Everything seems in order with your documentation. Enjoy your stay in the country!`;
+    replyFa = `متشکرم. تمام مدارک شما معتبر به نظر می‌رسد. از اقامت خود در کشور لذت ببرید!`;
+  } else if (lower.includes('interview') || lower.includes('experience') || lower.includes('project') || lower.includes('work') || lower.includes('team')) {
+    replyEn = `That sounds impressive! How do you handle high-pressure deadlines in your typical workflow?`;
+    replyFa = `بسیار چشمگیر است! شما معمولاً چگونه با ددلاین‌های پرفشار در روال کاری خود برخورد می‌کنید؟`;
+  } else if (lower.includes('doctor') || lower.includes('fever') || lower.includes('throat') || lower.includes('pain') || lower.includes('sick')) {
+    replyEn = `I see. I will prescribe some resting medication for you. Please make sure to drink plenty of fluids.`;
+    replyFa = `متوجهم. من برای شما داروی استراحت تجویز می‌کنم. لطفاً حتماً مایعات فراوان بنوشید.`;
+  } else if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
     if (persona.mood === 'formal') {
       replyEn = `Good day to you! How may I assist your English practice today?`;
       replyFa = `روز بر شما بخیر! امروز چگونه می‌توانم به تمرین انگلیسی شما کمک کنم؟`;
@@ -86,12 +99,12 @@ export function analyzeOfflineMessage(
     replyEn = `I'm feeling fantastic, thank you! How are things on your end?`;
     replyFa = `من حالم عالیه، ممنون! اوضاع سمت شما چطوره؟`;
   } else if (lower.includes('name')) {
-    replyEn = `My name is ${persona.name}. I'm your ${persona.roleFa}!`;
+    replyEn = `My name is ${persona.name}. I'm your ${persona.roleFa || 'partner'}!`;
     replyFa = `اسم من ${persona.name} است. من هم‌صحبت شما هستم!`;
   } else if (lower.includes('weather')) {
     replyEn = `The weather is lovely today! Do you enjoy sunny or rainy days more?`;
     replyFa = `هوا امروز خیلی دلپذیره! شما روزهای آفتابی رو بیشتر دوست داری یا بارونی؟`;
-  } else if (lower.includes('food') || lower.includes('eat') || lower.includes('coffee')) {
+  } else if (lower.includes('food') || lower.includes('eat')) {
     replyEn = `Food is always a fun topic! What's your favorite meal or drink?`;
     replyFa = `غذا همیشه موضوع جذابیه! غذا یا نوشیدنی مورد علاقه‌ت چیه؟`;
   } else {

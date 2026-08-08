@@ -5,6 +5,7 @@ import { DICTIONARY_WORDS } from '../data/dictionaryData';
 import { speakEnglishText } from '../lib/speech';
 import { WordDetailModal } from './WordDetailModal';
 import { getBookmarkedIds, toggleBookmarkId } from '../lib/offlineStorage';
+import { generateOfflineDictionaryEntry } from '../lib/offlineDictionary';
 
 interface DictionaryViewProps {
   activeDialect: DialectType;
@@ -22,7 +23,8 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({ activeDialect })
   const filteredWords = words.filter((w) => {
     const matchesSearch =
       w.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      w.meaningFa.includes(searchTerm);
+      w.meaningFa.includes(searchTerm) ||
+      w.examples?.some(e => e.en.toLowerCase().includes(searchTerm.toLowerCase()) || e.fa.includes(searchTerm));
 
     if (!matchesSearch) return false;
 
@@ -58,7 +60,7 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({ activeDialect })
         const payload = data.data || data;
         const newWord: DictionaryWord = {
           id: `w_ai_${Date.now()}`,
-          word: payload.word || searchTerm,
+          word: payload.word || searchTerm.trim(),
           phonetic: payload.phonetic || '/.../',
           meaningFa: payload.meaningFa || 'تحلیل کلمه',
           partOfSpeech: payload.partOfSpeech || 'noun',
@@ -70,11 +72,30 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({ activeDialect })
 
         setWords((prev) => [newWord, ...prev]);
         setSelectedWord(newWord);
+        setSearchTerm('');
+        setAiLoading(false);
+        return;
       }
     } catch (e) {
-      console.error('AI lookup error:', e);
+      console.warn('AI lookup offline fallback:', e);
     } finally {
       setAiLoading(false);
+    }
+
+    // Seamless offline generator fallback
+    const offlineWord = generateOfflineDictionaryEntry(searchTerm.trim(), activeDialect);
+    setWords((prev) => [offlineWord, ...prev]);
+    setSelectedWord(offlineWord);
+    setSearchTerm('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      if (filteredWords.length > 0) {
+        setSelectedWord(filteredWords[0]);
+      } else {
+        handleAiLookup();
+      }
     }
   };
 
@@ -94,6 +115,7 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({ activeDialect })
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="جستجوی هر کلمه یا اصطلاح انگلیسی/عربی (بیش از ۱۰۰,۰۰۰ کلمه با هوش مصنوعی)..."
               className="w-full bg-slate-50 border border-slate-200 rounded-2xl pr-12 pl-4 py-3 text-sm text-slate-800 focus:outline-none placeholder-slate-400"
             />
