@@ -70,203 +70,123 @@ export function speakEnglishText(
     const cleanText = text.trim();
     let langCode: string = accent;
     if (accent === 'ar-IQ' || accent === 'ar-LB') {
-      langCode = 'ar-SA';
+      langCode = 'ar';
     }
-
-    const playAudioFallback = () => {
-      try {
-        // Use client=gtx endpoint for reliable TTS playback
-        const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=gtx&tl=${encodeURIComponent(
-          langCode
-        )}&q=${encodeURIComponent(cleanText)}`;
-        const audio = new Audio(audioUrl);
-        audio.playbackRate = Math.min(Math.max(rate, 0.75), 1.25);
-        activeAudioFallback = audio;
-
-        audio.onended = () => {
-          activeAudioFallback = null;
-          resolve();
-        };
-
-        audio.onerror = () => {
-          activeAudioFallback = null;
-          playAudioToneFallback();
-          resolve();
-        };
-
-        audio.play().catch(() => {
-          playAudioToneFallback();
-          resolve();
-        });
-      } catch (err) {
-        playAudioToneFallback();
-        resolve();
-      }
-    };
 
     const playAudioToneFallback = () => {
       try {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioCtx) {
-          resolve();
-          return;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.3);
         }
-        const ctx = new AudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.3);
       } catch (e) {
         // ignore
       }
       resolve();
     };
 
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      try {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-        }
-
-        const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.lang = langCode;
-        utterance.rate = Math.min(Math.max(rate, 0.6), 1.4);
-
-        // Adjust pitch according to gender preference
-        if (gender === 'male') {
-          utterance.pitch = Math.max(0.7, Math.min(pitch * 0.85, 0.95));
-        } else {
-          utterance.pitch = Math.min(1.3, Math.max(pitch * 1.05, 1.0));
-        }
-
-        (window as any)._activeUtteranceRef = utterance;
-
-        const voices = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
-        const prefix = langCode.slice(0, 2);
-
-        // Find matching voices for the language
-        const matchingLangVoices = voices.filter(
-          (v) =>
-            v.lang === langCode ||
-            v.lang.replace('_', '-') === langCode ||
-            v.lang.toLowerCase().startsWith(prefix.toLowerCase())
-        );
-
-        const MALE_KEYWORDS = [
-          'male', 'david', 'mark', 'george', 'daniel', 'james', 'richard',
-          'alex', 'brian', 'ryan', 'guy', 'stefan', 'maged', 'naayf', 'shakir',
-          'tarik', 'thomas', 'oliver', 'paul', 'rishi', 'fred', 'dylan', 'john',
-          'mike', 'steven', 'tom', 'sam'
-        ];
-
-        const FEMALE_KEYWORDS = [
-          'female', 'zira', 'samantha', 'victoria', 'karen', 'mona', 'salma',
-          'laila', 'hazel', 'jenny', 'aria', 'sonia', 'emma', 'susan', 'fiona',
-          'veena'
-        ];
-
-        let selectedVoice: SpeechSynthesisVoice | undefined;
-
-        if (gender === 'male') {
-          selectedVoice = matchingLangVoices.find((v) =>
-            MALE_KEYWORDS.some((kw) => v.name.toLowerCase().includes(kw))
-          );
-        } else {
-          selectedVoice = matchingLangVoices.find((v) =>
-            FEMALE_KEYWORDS.some((kw) => v.name.toLowerCase().includes(kw))
-          );
-        }
-
-        if (!selectedVoice && matchingLangVoices.length > 0) {
-          selectedVoice = matchingLangVoices[0];
-        }
-
-        if (selectedVoice) {
-          utterance.voice = selectedVoice;
-        }
-
-        let hasEnded = false;
-        let startedSpeaking = false;
-
-        const safeResolve = () => {
-          if (!hasEnded) {
-            hasEnded = true;
-            (window as any)._activeUtteranceRef = null;
-            resolve();
-          }
-        };
-
-        // Fallback after 1.2s if utterance doesn't start speaking
-        const startCheckTimeout = setTimeout(() => {
-          if (!startedSpeaking && !hasEnded) {
-            hasEnded = true;
-            try {
-              window.speechSynthesis.cancel();
-            } catch (e) {
-              // ignore
-            }
-            playAudioFallback();
-          }
-        }, 1200);
-
-        // Safety timeout for long texts
-        const safetyTimeout = setTimeout(() => {
-          if (!hasEnded) {
-            hasEnded = true;
-            try {
-              window.speechSynthesis.cancel();
-            } catch (e) {
-              // ignore
-            }
-            resolve();
-          }
-        }, Math.max(8000, cleanText.length * 300));
-
-        utterance.onstart = () => {
-          startedSpeaking = true;
-          clearTimeout(startCheckTimeout);
-        };
-
-        utterance.onend = () => {
-          clearTimeout(startCheckTimeout);
-          clearTimeout(safetyTimeout);
-          safeResolve();
-        };
-
-        utterance.onerror = () => {
-          clearTimeout(startCheckTimeout);
-          clearTimeout(safetyTimeout);
-          if (!hasEnded) {
-            hasEnded = true;
-            playAudioFallback();
-          }
-        };
-
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-        }
-
-        window.speechSynthesis.speak(utterance);
-
-        setTimeout(() => {
+    // Method 2: Client Web Speech API (SpeechSynthesis) for Offline Mode
+    const playWebSpeechFallback = () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
           if (window.speechSynthesis.paused) {
             window.speechSynthesis.resume();
           }
-        }, 50);
-        return;
-      } catch (e) {
-        playAudioFallback();
-        return;
-      }
-    }
 
-    playAudioFallback();
+          const utterance = new SpeechSynthesisUtterance(cleanText);
+          utterance.lang = langCode;
+          utterance.rate = Math.min(Math.max(rate, 0.6), 1.4);
+
+          if (gender === 'male') {
+            utterance.pitch = Math.max(0.7, Math.min(pitch * 0.85, 0.95));
+          } else {
+            utterance.pitch = Math.min(1.3, Math.max(pitch * 1.05, 1.0));
+          }
+
+          const voices = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
+          const prefix = langCode.slice(0, 2);
+
+          const matchingLangVoices = voices.filter(
+            (v) =>
+              v.lang === langCode ||
+              v.lang.replace('_', '-') === langCode ||
+              v.lang.toLowerCase().startsWith(prefix.toLowerCase())
+          );
+
+          if (matchingLangVoices.length > 0) {
+            utterance.voice = matchingLangVoices[0];
+          }
+
+          let done = false;
+          utterance.onend = () => {
+            if (!done) {
+              done = true;
+              resolve();
+            }
+          };
+
+          utterance.onerror = () => {
+            if (!done) {
+              done = true;
+              playAudioToneFallback();
+            }
+          };
+
+          window.speechSynthesis.speak(utterance);
+
+          // Safety timeout for web speech synthesis
+          setTimeout(() => {
+            if (!done) {
+              done = true;
+              resolve();
+            }
+          }, Math.max(3000, cleanText.length * 200));
+
+          return;
+        } catch (e) {
+          playAudioToneFallback();
+          return;
+        }
+      }
+      playAudioToneFallback();
+    };
+
+    // Method 1: High-Quality Server-Side Audio Stream (/api/tts)
+    try {
+      const audioUrl = `/api/tts?text=${encodeURIComponent(cleanText)}&lang=${encodeURIComponent(langCode)}`;
+      const audio = new Audio(audioUrl);
+      audio.playbackRate = Math.min(Math.max(rate, 0.75), 1.25);
+      activeAudioFallback = audio;
+
+      audio.onended = () => {
+        activeAudioFallback = null;
+        resolve();
+      };
+
+      audio.onerror = () => {
+        activeAudioFallback = null;
+        playWebSpeechFallback();
+      };
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          activeAudioFallback = null;
+          playWebSpeechFallback();
+        });
+      }
+    } catch (err) {
+      playWebSpeechFallback();
+    }
   });
 }
-

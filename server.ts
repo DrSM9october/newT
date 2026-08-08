@@ -231,6 +231,50 @@ Return valid JSON with:
   }
 });
 
+// 4. Server-Side TTS Proxy Endpoint (solves browser CORS and audio playback blocks)
+app.get('/api/tts', async (req, res) => {
+  try {
+    const text = (req.query.text as string || '').trim();
+    let lang = (req.query.lang as string || 'en-US').trim();
+
+    if (!text) {
+      return res.status(400).send('Text parameter is required');
+    }
+
+    // Map dialect codes to Google Translate TTS ISO codes
+    if (lang === 'ar-IQ' || lang === 'ar-LB') {
+      lang = 'ar';
+    } else if (lang.startsWith('en')) {
+      lang = 'en';
+    }
+
+    // Construct Google TTS audio stream URL
+    const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(text.slice(0, 300))}`;
+
+    const audioRes = await fetch(googleTtsUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'audio/mpeg, audio/*',
+      }
+    });
+
+    if (!audioRes.ok) {
+      throw new Error(`TTS upstream status: ${audioRes.status}`);
+    }
+
+    const arrayBuffer = await audioRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Length', buffer.length.toString());
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(buffer);
+  } catch (error: any) {
+    console.error('Error proxying TTS audio:', error);
+    return res.status(500).send('Failed to generate audio');
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`LinguaAI server running on port ${PORT}`);

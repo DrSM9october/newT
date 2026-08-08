@@ -120,7 +120,7 @@ export class AIManager {
       console.warn('Fallback in scenario chat:', err);
       const offlineRes = analyzeOfflineMessage(
         req.userText,
-        'alex_casual',
+        req.persona?.id || 'alex_casual',
         req.dialect || 'en-US'
       );
 
