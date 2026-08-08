@@ -66,7 +66,7 @@ export interface RoleplayScenario {
   titleFa: string;
   titleEn: string;
   descriptionFa: string;
-  category: 'restaurant_cafe' | 'travel_airport' | 'shopping_market' | 'job_interview' | 'social_chat' | 'directions_transport' | 'hotel_stay' | 'emergency_doctor' | 'business_negotiation';
+  category: 'restaurant_cafe' | 'travel_airport' | 'shopping_market' | 'job_interview' | 'social_chat' | 'directions_transport' | 'hotel_stay' | 'emergency_doctor' | 'business_negotiation' | 'shopping' | 'health_medical' | 'technology' | 'daily_life';
   level: DifficultyLevel;
   dialect?: DialectType;
   icon: string;

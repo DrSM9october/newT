@@ -192,6 +192,8 @@ export function speakEnglishText(
         }
 
         let hasEnded = false;
+        let startedSpeaking = false;
+
         const safeResolve = () => {
           if (!hasEnded) {
             hasEnded = true;
@@ -200,7 +202,20 @@ export function speakEnglishText(
           }
         };
 
-        // Safety fallback after 15 seconds if utterance hangs
+        // Fallback after 1.2s if utterance doesn't start speaking
+        const startCheckTimeout = setTimeout(() => {
+          if (!startedSpeaking && !hasEnded) {
+            hasEnded = true;
+            try {
+              window.speechSynthesis.cancel();
+            } catch (e) {
+              // ignore
+            }
+            playAudioFallback();
+          }
+        }, 1200);
+
+        // Safety timeout for long texts
         const safetyTimeout = setTimeout(() => {
           if (!hasEnded) {
             hasEnded = true;
@@ -211,24 +226,39 @@ export function speakEnglishText(
             }
             resolve();
           }
-        }, Math.max(10000, cleanText.length * 400));
+        }, Math.max(8000, cleanText.length * 300));
+
+        utterance.onstart = () => {
+          startedSpeaking = true;
+          clearTimeout(startCheckTimeout);
+        };
 
         utterance.onend = () => {
+          clearTimeout(startCheckTimeout);
           clearTimeout(safetyTimeout);
           safeResolve();
         };
 
         utterance.onerror = () => {
+          clearTimeout(startCheckTimeout);
           clearTimeout(safetyTimeout);
-          playAudioFallback();
+          if (!hasEnded) {
+            hasEnded = true;
+            playAudioFallback();
+          }
         };
+
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
 
         window.speechSynthesis.speak(utterance);
 
-        // Resume if browser suspended speechSynthesis
-        if (window.speechSynthesis.speaking) {
-          window.speechSynthesis.resume();
-        }
+        setTimeout(() => {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+        }, 50);
         return;
       } catch (e) {
         playAudioFallback();

@@ -1,6 +1,7 @@
 import { RoleplayScenario } from '../types';
 
 export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
+  // 1. Starbucks Coffee Order (USA)
   {
     id: 'sc_cafe_order',
     titleFa: 'سفارش قهوه و کیک در کافه استارباکس ☕',
@@ -32,6 +33,8 @@ export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
     ],
     keyVocab: ['Iced Latte', 'Oat milk', 'Takeaway', 'Muffin', 'Receipt'],
   },
+
+  // 2. Heathrow Airport Immigration (UK)
   {
     id: 'sc_airport_immigration',
     titleFa: 'کنترل گذرنامه و ویزا در فرودگاه لندن ✈️',
@@ -62,6 +65,8 @@ export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
     ],
     keyVocab: ['Immigration', 'Customs', 'Purpose of visit', 'Accommodation', 'Return ticket'],
   },
+
+  // 3. Iraqi Taxi in Baghdad 🇮🇶
   {
     id: 'sc_baghdad_taxi',
     titleFa: 'کرایه تاکسی و آدرس‌دهی در بغداد 🇮🇶',
@@ -72,7 +77,7 @@ export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
     dialect: 'ar-IQ',
     icon: 'Car',
     aiPersona: {
-      name: 'أبو زهرراء (سائق تاكسي)',
+      name: 'أبو زهراء (سائق تاكسي)',
       role: 'راننده تاکسی خون‌گرم بغدادی',
       avatar: '🚕',
       gender: 'male',
@@ -92,6 +97,8 @@ export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
     ],
     keyVocab: ['بيش (چقدر)', 'عيوني (عزیزم)', 'نزّلني (پیدام کن)', 'الشارع (خیابان)'],
   },
+
+  // 4. Hotel Check-in Beirut 🇱🇧
   {
     id: 'sc_beirut_hotel',
     titleFa: 'رزرو و تحویل اتاق هتل در بیروت 🇱🇧',
@@ -122,6 +129,8 @@ export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
     ],
     keyVocab: ['بونجور (روز بخیر)', 'تكرم عينك (روی چشمام)', 'غرفة (اتاق)', 'الفطور (صبحانه)'],
   },
+
+  // 5. Tech Job Interview
   {
     id: 'sc_job_interview',
     titleFa: 'مصاحبه شغلی مهندسی نرم‌افزار / مدیریت 💼',
@@ -151,5 +160,325 @@ export const PRACTICAL_SCENARIOS: RoleplayScenario[] = [
       { en: "What does growth and mentorship look like within this team?", fa: "رشد و راهنمایی حرفه‌ای در این تیم به چه صورت است؟" },
     ],
     keyVocab: ['Track record', 'Problem-solving', 'Team player', 'Scalability', 'Career goals'],
+  },
+
+  // 6. London Clothes Shopping (UK)
+  {
+    id: 'sc_london_shopping',
+    titleFa: 'خرید لباس و چانه‌زنی در خیابان آکسفورد لندن 🛍️',
+    titleEn: 'Clothes Shopping on Oxford Street',
+    descriptionFa: 'در یک فروشگاه مد در آکسفورد استریت لندن هستید. سایز مناسب را امتحان کنید و درباره تخفیف یا نحوه بازگشت کالا سوال کنید.',
+    category: 'shopping',
+    level: 'A2',
+    dialect: 'en-GB',
+    icon: 'ShoppingBag',
+    aiPersona: {
+      name: 'Emma (Sales Assistant)',
+      role: 'فروشنده شیک‌پوش فروشگاه لندن',
+      avatar: '🛍️',
+      gender: 'female',
+      mood: 'friendly',
+      systemPrompt: 'You are Emma, a helpful retail assistant on Oxford Street London. Help the customer find the right outfit size and process their payment.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'درخواست پرو لباس با سایز مشخص (Medium / Size 10)', titleEn: 'Ask fitting room', completed: false },
+      { id: 'obj2', titleFa: 'پرسش درباره تخفیف یا مالیات (Tax-free shopping)', titleEn: 'Ask discount', completed: false },
+      { id: 'obj3', titleFa: 'استعلام سیاست تعویض یا بازگشت کالا (Return policy)', titleEn: 'Ask return policy', completed: false },
+    ],
+    starterMessage: "Hello! Lovely to see you. Are you looking for anything specific today, or just having a browse?",
+    usefulPhrases: [
+      { en: "Do you have this jacket in a medium, please?", fa: "آیا این کاپشن را در سایز لارج دارید؟" },
+      { en: "Where are the fitting rooms located?", fa: "اتاق‌های پرو کجا قرار دارند؟" },
+      { en: "What is your return policy if it doesn't fit?", fa: "اگر سایزم نشد، سیاست تعویض یا پس گرفتن شما چیست؟" },
+    ],
+    keyVocab: ['Fitting room', 'Receipt', 'Tax-free', 'Refund', 'Discount'],
+  },
+
+  // 7. NYC Restaurant Complaint / Fixing Order 🍽️
+  {
+    id: 'sc_nyc_restaurant_complaint',
+    titleFa: 'پیگیری اشتباه در سفارش غذای رستوران نیویورک 🍽️',
+    titleEn: 'Resolving a Wrong Food Order at a Restaurant',
+    descriptionFa: 'در رستوران استیک‌هواس نیویورک غذایی اشتباه یا سرد برای شما آورده شده. مؤدبانه اما قاطعانه موضوع را با گارسون حل کنید.',
+    category: 'restaurant_cafe',
+    level: 'B1',
+    dialect: 'en-US',
+    icon: 'Coffee',
+    aiPersona: {
+      name: 'Jason (Head Waiter)',
+      role: 'سرگارسون حرفه‌ای رستوران',
+      avatar: '👨‍🍳',
+      gender: 'male',
+      mood: 'formal',
+      systemPrompt: 'You are Jason, a professional waiter at a high-end NYC steakhouse. Apologize politely and replace any wrong or cold dish for the guest.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'جلب توجه گارسون با لحن مؤدبانه (Excuse me)', titleEn: 'Polite attention', completed: false },
+      { id: 'obj2', titleFa: 'توضیح دقیق مشکل (سرد بودن غذا یا سفارش اشتباه)', titleEn: 'Explain issue', completed: false },
+      { id: 'obj3', titleFa: 'توافق بر سر تعویض غذا یا دریافت تخفیف صورتحساب', titleEn: 'Resolve problem', completed: false },
+    ],
+    starterMessage: "Excuse me, sir/madam. How is everything tasting so far with your dinner?",
+    usefulPhrases: [
+      { en: "Excuse me, but I ordered my steak medium-rare, and this seems well-done.", fa: "ببخشید، اما من استیکم را مدیوم-ریر سفارش داده بودم ولی این کاملاً پخته شده است." },
+      { en: "Could you please warm this up or replace it?", fa: "ممکنه لطفاً این را گرم کنید یا تعویض نمایید؟" },
+      { en: "Thank you for addressing this so quickly.", fa: "ممنونم که این موضوع را به این سرعتی برطرف کردید." },
+    ],
+    keyVocab: ['Medium-rare', 'Complimentary', 'Replace', 'Apologize', 'Bill'],
+  },
+
+  // 8. Doctor Visit & Symptoms 🩺
+  {
+    id: 'sc_doctor_visit',
+    titleFa: 'ویزیت پزشک و شرح علائم بیماری در کلینیک 🩺',
+    titleEn: 'Doctor Visit & Explaining Symptoms',
+    descriptionFa: 'به دلیل گلو درد و تب به کلینیک مراجعه کرده‌اید. علائم خود را شرح دهید و دستورات دارویی را از پزشک بگیرید.',
+    category: 'health_medical',
+    level: 'B1',
+    dialect: 'en-US',
+    icon: 'Activity',
+    aiPersona: {
+      name: 'Dr. Emily Carter',
+      role: 'پزشک عمومی مهربان و دقیق',
+      avatar: '🩺',
+      gender: 'female',
+      mood: 'friendly',
+      systemPrompt: 'You are Dr. Emily Carter, a caring general practitioner at an urgent care clinic. Ask about the patient symptoms and prescribe proper treatment.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'توضیح علائم اصلی (Sore throat, Fever, Headache)', titleEn: 'Describe symptoms', completed: false },
+      { id: 'obj2', titleFa: 'ذکر مدت زمان شروع بیماری (Since 3 days ago)', titleEn: 'State duration', completed: false },
+      { id: 'obj3', titleFa: 'پرسش درباره دوز مصرفی دارو و حساسیتی دارویی', titleEn: 'Ask dosage', completed: false },
+    ],
+    starterMessage: "Hello! Come on in and have a seat. What brings you to the clinic today?",
+    usefulPhrases: [
+      { en: "I have been having a sore throat and a mild fever for the past three days.", fa: "من از سه روز پیش دچار گلو درد و تب خفیف شده‌ام." },
+      { en: "Are there any side effects to this medication?", fa: "آیا این دارو عوارض جانبی خاصی دارد؟" },
+      { en: "How many times a day should I take this antibiotic?", fa: "چند بار در روز باید این آنتی‌بیوتیک را مصرف کنم؟" },
+    ],
+    keyVocab: ['Sore throat', 'Prescription', 'Dosage', 'Side effects', 'Antibiotic'],
+  },
+
+  // 9. Ordering Shawarma in Baghdad 🇮🇶
+  {
+    id: 'sc_baghdad_shawarma',
+    titleFa: 'سفارش شاورما و کباب عراقی در کراده 🥙🇮🇶',
+    titleEn: 'Ordering Iraqi Shawarma in Baghdad',
+    descriptionFa: 'مقابل یک ساندویچی شلوغ در کراده بغداد هستید. ساندویچ گس (شاورما عراقی) با صمغ و ترشی سفارش دهید.',
+    category: 'restaurant_cafe',
+    level: 'A1',
+    dialect: 'ar-IQ',
+    icon: 'Coffee',
+    aiPersona: {
+      name: 'أبو أحمد (صاحب المطعم)',
+      role: 'صاحب مغازه قصاب و شاورمایی بغدادی',
+      avatar: '🥙',
+      gender: 'male',
+      mood: 'friendly',
+      systemPrompt: 'You are Abu Ahmed, a famous shawarma and kebab restaurant owner in Baghdad speaking Iraqi Arabic dialect.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'سفارش ساندویچ گس لحم یا دجاج (گص گوشت یا مرغ)', titleEn: 'Order shawarma', completed: false },
+      { id: 'obj2', titleFa: 'انتخاب نان صمون عراقی و ترشی (عمبة وطماطة)', titleEn: 'Add toppings', completed: false },
+      { id: 'obj3', titleFa: 'پرسش درباره قیمت و حساب کردن (بيش الحساب؟)', titleEn: 'Pay bill', completed: false },
+    ],
+    starterMessage: "يا هلا بالغالي! نورتنا. شنو تحب اليوم؟ گص لحم لو دجاج عراقي أصلي؟",
+    usefulPhrases: [
+      { en: "سويلي صمونه گص لحم مع عمبة وزلاطة من فضلَك.", fa: "برام یک صمون گص گوشت با انبه و سالاد بزن لطفاً." },
+      { en: "بيش الحساب حبيبي؟ - عاشت ايدك!", fa: "حساب چقدر میشه عشقم؟ - دستت درد نکنه!" },
+      { en: "كثرلي العمبة شوية اخويا!", fa: "سس انبه رو برام یکم بیشتر بریز داداش!" },
+    ],
+    keyVocab: ['گص (شاورما)', 'صمون (نان عراقی)', 'عمبة (سس انبه)', 'عاشت ايدك (دستت درد نکنه)'],
+  },
+
+  // 10. Seaside Cafe in Beirut 🇱🇧
+  {
+    id: 'sc_beirut_seaside_cafe',
+    titleFa: 'قهوه و دسر لبنانی در کورنیش بیروت 🇱🇧',
+    titleEn: 'Ordering Lebanese Coffee at Beirut Corniche',
+    descriptionFa: 'کنار ساحل زیبای الروشة بیروت نشسته اید. قهوه عربی هل‌دار و كنافة لبنانی سفارش دهید.',
+    category: 'restaurant_cafe',
+    level: 'A2',
+    dialect: 'ar-LB',
+    icon: 'Coffee',
+    aiPersona: {
+      name: 'شادي (الويتر اللبناني)',
+      role: 'گارسون خوش‌پوش کافه ساحلی بیروت',
+      avatar: '☕',
+      gender: 'male',
+      mood: 'friendly',
+      systemPrompt: 'You are Shadi, a refined Lebanese cafe server by Beirut Sea Corniche speaking Lebanese Arabic dialect.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'درخواست منو و سفارش قهوه لبنانی (ركوة قهوة)', titleEn: 'Order coffee', completed: false },
+      { id: 'obj2', titleFa: 'سفارش شیرینی کنافه یا بقلاوه (كنافة بالجبنة)', titleEn: 'Order dessert', completed: false },
+      { id: 'obj3', titleFa: 'درخواست صورتحساب با لحن لبنانی (الحساب من فضلك)', titleEn: 'Ask check', completed: false },
+    ],
+    starterMessage: "أهلا وسهلا فيك! شو بتحب تشرب اليوم قدام البحر الحلو؟",
+    usefulPhrases: [
+      { en: "بدي ركوة قهوة مع هال، وصحن كنافة بالجبنة من فضلك.", fa: "یک قوری قهوه با هل و یک بشقاب کنافه پنیری می‌خوام لطفاً." },
+      { en: "شو أطيب حلو عندكن اليوم؟ - تكرم عينك!", fa: "خوشمزه‌ترین شیرینی امروزتون چی هست؟ - روی چشمام!" },
+      { en: "الحساب لو سمحت، يسلمو إيديك!", fa: "صورتحساب لطفاً، دستت درد نکنه!" },
+    ],
+    keyVocab: ['ركوة قهوة (قوری قهوه)', 'كنافة (کنافه)', 'يسلمو (دستت درد نکنه)', 'ع راس راسي (روی چشمام)'],
+  },
+
+  // 11. Customer Support Call 📞
+  {
+    id: 'sc_customer_support',
+    titleFa: 'تماس با پشتیبانی فنی برای قطعی اینترنت 📞',
+    titleEn: 'Calling Customer Support for Broadband Issue',
+    descriptionFa: 'اینترنت منزل شما قطع شده است. با کارمند مرکز پشتیبانی تماس بگیرید و کدهای خطا و مودم را بررسی کنید.',
+    category: 'technology',
+    level: 'B2',
+    dialect: 'en-US',
+    icon: 'MessageSquare',
+    aiPersona: {
+      name: 'Alex (Tech Support Agent)',
+      role: 'کارشناس صبور پشتیبانی شبکه',
+      avatar: '🎧',
+      gender: 'male',
+      mood: 'formal',
+      systemPrompt: 'You are Alex, a calm internet service customer representative helping a client fix a connection outage.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'ارائه شماره اشتراک یا شماره حساب کاربر', titleEn: 'Provide Account #', completed: false },
+      { id: 'obj2', titleFa: 'توضیح وضعیت چراغ‌های مودم (Red blinking light)', titleEn: 'Explain modem lights', completed: false },
+      { id: 'obj3', titleFa: 'درخواست اعزام تکنسین حضوری در صورت عدم حل مشکل', titleEn: 'Request technician', completed: false },
+    ],
+    starterMessage: "Thank you for calling FastNet Broadband support. My name is Alex. How can I assist you today?",
+    usefulPhrases: [
+      { en: "My internet has been down for the last two hours, and the router light is blinking red.", fa: "اینترنت من دو ساعت است که قطع شده و چراغ روتر قرمز چشمک می‌زند." },
+      { en: "I have already restarted the router, but it didn't help.", fa: "من مودم را ری‌استارت کرده‌ام اما کمکی نکرد." },
+      { en: "When is the earliest a technician can visit my house?", fa: "زودترین زمانی که تکنسین می‌تواند به خانه من بیاید چه زمانی است؟" },
+    ],
+    keyVocab: ['Outage', 'Router', 'Blinking light', 'Technician', 'Account number'],
+  },
+
+  // 12. Renting a Car at LAX Airport 🚗
+  {
+    id: 'sc_car_rental',
+    titleFa: 'اجاره خودرو در فرودگاه لس‌آنجلس 🚗',
+    titleEn: 'Renting a Car at LAX Airport',
+    descriptionFa: 'در شرکت اجاره خودرو فرودگاه لس‌آنجلس هستید. خودرو مناسب، بیمه کامل و GPS را با کارمند هماهنگ کنید.',
+    category: 'directions_transport',
+    level: 'B1',
+    dialect: 'en-US',
+    icon: 'Car',
+    aiPersona: {
+      name: 'David (Rental Agent)',
+      role: 'نماینده اجاره خودرو شرکت Hertz/Enterprise',
+      avatar: '🚘',
+      gender: 'male',
+      mood: 'friendly',
+      systemPrompt: 'You are David, a car rental desk agent at LAX Airport explaining options, insurance, and fuel policies.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'انتخاب نوع خودرو (SUV / Sedan / Convertible)', titleEn: 'Choose car class', completed: false },
+      { id: 'obj2', titleFa: 'اضافه کردن بیمه بدنه و سرقت (Full coverage insurance)', titleEn: 'Select insurance', completed: false },
+      { id: 'obj3', titleFa: 'پرسش درباره محل تحویل سوئیچ و مخزن بنزین', titleEn: 'Ask drop-off policy', completed: false },
+    ],
+    starterMessage: "Welcome to LAX Enterprise Rentals! Do you have a reservation with us today, or are you looking for a walk-in rental?",
+    usefulPhrases: [
+      { en: "I would like to rent a mid-size SUV for five days with full coverage insurance.", fa: "من می‌خواهم یک شاسی‌بلند سایز متوسط را برای پنج روز همراه با بیمه کامل اجاره کنم." },
+      { en: "Does the rental include unlimited mileage?", fa: "آیا کرایه شامل کیلومتر نامحدود است؟" },
+      { en: "Where do I return the keys when I drop off the car?", fa: "هنگام تحویل دادن ماشین، کلیدها را کجا تحویل دهم؟" },
+    ],
+    keyVocab: ['SUV', 'Unlimited mileage', 'Full coverage', 'Driver license', 'Security deposit'],
+  },
+
+  // 13. Shorja Market Spices Baghdad 🇮🇶
+  {
+    id: 'sc_baghdad_shorja_market',
+    titleFa: 'خرید ادویه‌جات در بازار شورجه بغداد 🕌🇮🇶',
+    titleEn: 'Bargaining for Spices in Shorja Market',
+    descriptionFa: 'در دل بازار سنتی شورجه بغداد هستید. عطر ادویه‌های اصیل عربی پیچیده است. درباره هل، زعفران و تخفیف گفتگو کنید.',
+    category: 'shopping',
+    level: 'B1',
+    dialect: 'ar-IQ',
+    icon: 'ShoppingBag',
+    aiPersona: {
+      name: 'حجي أبو علي (العطار)',
+      role: 'عطار باسابقه بازار شورجه بغداد',
+      avatar: '🏺',
+      gender: 'male',
+      mood: 'friendly',
+      systemPrompt: 'You are Hajji Abu Ali, a traditional spice shop merchant in Shorja market Baghdad speaking warm Iraqi Arabic.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'پرسش درباره قیمت ادویه بهیارات بغدادی (بيش الكيلو؟)', titleEn: 'Ask spice price', completed: false },
+      { id: 'obj2', titleFa: 'درخواست بسته‌بندی محکم برای سفر (غلفها زين اخويا)', titleEn: 'Request packaging', completed: false },
+      { id: 'obj3', titleFa: 'تخفیف گرفتن با زبان خوش (سويلنا خصم حلو حجي)', titleEn: 'Ask discount', completed: false },
+    ],
+    starterMessage: "يا أهلا وسهلا بالحبيب! تفضل العطارية نورت. شنو محتاج بهارات عراقية أصلي اليوم؟",
+    usefulPhrases: [
+      { en: "بيش كيلو بهارات الجدر والعنبة حجينا؟", fa: "حاجی جون قیمت یک کیلو ادویه دیگی و انبه چقدره؟" },
+      { en: "سويلنا خصم حلو للزبون، ترى راجعين لك!", fa: "یک تخفیف خوب برای مشتری بزن، چون باز هم پیشت برمی‌گردیم!" },
+      { en: "رحم الله والديك، غلفها بغلاف سفر.", fa: "خدا رفتگانت رو بیامرزه، محکم مخصوص سفر بسته‌بندی کن." },
+    ],
+    keyVocab: ['بهارات (ادویه‌جات)', 'حجي (حاجی)', 'خصم (تخفیف)', 'رحم الله والديك (خدا پدرتو بیامرزه)'],
+  },
+
+  // 14. Clothes Shopping in Hamra Beirut 🇱🇧
+  {
+    id: 'sc_beirut_shopping_hamra',
+    titleFa: 'خرید بوتیک خیابان حمرا بیروت 👗🇱🇧',
+    titleEn: 'Boutique Shopping in Hamra Street Beirut',
+    descriptionFa: 'در خیابان معروف حمرا بیروت وارد یک بوتیک لباس شیک شده‌اید. تخفیف بگیرید و نظر فروشنده لبنانی را بپرسید.',
+    category: 'shopping',
+    level: 'A2',
+    dialect: 'ar-LB',
+    icon: 'ShoppingBag',
+    aiPersona: {
+      name: 'کارول (صاحبة البوتيك)',
+      role: 'فروشنده لبنانی خوش‌سلیقه',
+      avatar: '👗',
+      gender: 'female',
+      mood: 'friendly',
+      systemPrompt: 'You are Carole, a stylish boutique store owner on Hamra Street Beirut speaking warm Lebanese Arabic.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'پرسیدن نظر فروشنده درباره رنگ و سایز لباس', titleEn: 'Ask advice', completed: false },
+      { id: 'obj2', titleFa: 'درخواست تخفیف ویژه (عمليلي ديسكونت حلو)', titleEn: 'Ask discount', completed: false },
+      { id: 'obj3', titleFa: 'پرداخت با کارت یا دلار/لیر (كيف فيني أدفع؟)', titleEn: 'Payment method', completed: false },
+    ],
+    starterMessage: "هااي! بونجور يا حلوة، أهلا وسهلا فيكي بالبوتيك! شو عم تفتشي اليوم؟",
+    usefulPhrases: [
+      { en: "كتير حلو هالفستان! في منه قياس أصغر؟", fa: "این پیراهن خیلی قشنگه! آیا سایز کوچک‌تر هم ازش دارین؟" },
+      { en: "عمليلي ديسكونت حلو تكرم عينك!", fa: "یک تخفیف خوب برام بزن روی چشمات!" },
+      { en: "ممكن أدفع بالدولار لو سمحتي؟", fa: "ممکنه به دلار پرداخت کنم لطفاً؟" },
+    ],
+    keyVocab: ['قياس (سایز)', 'ديسكونت (تخفیف)', 'كتير حلو (خیلی قشنگ)', 'يسلمو (ممنون)'],
+  },
+
+  // 15. Apartment Rental Viewing 🏠
+  {
+    id: 'sc_apartment_viewing',
+    titleFa: 'بازدید و اجاره آپارتمان با مشاور املاک 🏠',
+    titleEn: 'Apartment Viewing with Real Estate Agent',
+    descriptionFa: 'همراه با مشاور املاک در حال بازدید از یک آپارتمان شیک دوخوابه در مرکز شهر هستید. شرایط اجاره، ودیعه و قبوض را بررسی کنید.',
+    category: 'daily_life',
+    level: 'B2',
+    dialect: 'en-US',
+    icon: 'Bed',
+    aiPersona: {
+      name: 'Robert Vance (Realtor)',
+      role: 'مشاور مسکن شرکت املاک',
+      avatar: '🗝️',
+      gender: 'male',
+      mood: 'formal',
+      systemPrompt: 'You are Robert Vance, a licensed real estate agent showing a modern two-bedroom downtown apartment.',
+    },
+    objectives: [
+      { id: 'obj1', titleFa: 'پرسش درباره میزان اجاره ماهانه و ودیعه (Security deposit)', titleEn: 'Ask rent & deposit', completed: false },
+      { id: 'obj2', titleFa: 'استعلام قبوض مصرفی (Utilities included in rent)', titleEn: 'Ask utilities', completed: false },
+      { id: 'obj3', titleFa: 'پرسش درباره قوانین نگهداری حیوان خانگی یا پارکینگ', titleEn: 'Ask lease terms', completed: false },
+    ],
+    starterMessage: "Welcome! Come on in. As you can see, this unit gets plenty of natural light and has hardwood floors throughout.",
+    usefulPhrases: [
+      { en: "How much is the monthly rent, and what does the security deposit cover?", fa: "اجاره ماهانه چقدر است و ودیعه چه مواردی را پوشش می‌دهد؟" },
+      { en: "Are utilities like water and heating included in the rent?", fa: "آیا قبوض مانند آب و سیستم گرمایشی روی اجاره محاسبه شده‌اند؟" },
+      { en: "Is there an assigned parking space for this apartment?", fa: "آیا جای پارک اختصاصی برای این آپارتمان وجود دارد؟" },
+    ],
+    keyVocab: ['Security deposit', 'Utilities', 'Lease agreement', 'Furnished', 'Parking spot'],
   },
 ];

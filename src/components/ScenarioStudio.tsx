@@ -49,6 +49,9 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({ activeDialect })
   const handleExitScenario = () => {
     stopSpeech();
     setActiveScenario(null);
+    if (window.history.state && window.history.state.scenarioActive) {
+      window.history.back();
+    }
   };
 
   const filteredScenarios = PRACTICAL_SCENARIOS.filter((sc) => {

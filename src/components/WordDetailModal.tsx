@@ -57,6 +57,9 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
   const handleClose = () => {
     stopSpeech();
     onClose();
+    if (window.history.state && window.history.state.wordModalOpen) {
+      window.history.back();
+    }
   };
 
   return (
