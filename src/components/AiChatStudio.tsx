@@ -3,7 +3,7 @@ import { Send, Mic, MicOff, Volume2, Sparkles, RefreshCw, CheckCircle2, User, Us
 import { ChatMessage, DialectType, GenderType, DifficultyLevel, Persona } from '../types';
 import { CHAT_PERSONAS } from '../data/personasData';
 import { aiManager } from '../core/AIManager';
-import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
+import { speakEnglishText, stopSpeech, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
 
 interface AiChatStudioProps {
   activeDialect: DialectType;
@@ -26,6 +26,7 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
 
   // Initialize chat when persona changes
   useEffect(() => {
+    stopSpeech();
     setMessages([
       {
         id: `init_${selectedPersona.id}_${Date.now()}`,
@@ -37,6 +38,10 @@ export const AiChatStudio: React.FC<AiChatStudioProps> = ({ activeDialect }) => 
       },
     ]);
     setSelectedAccent(selectedPersona.dialect as SupportedAccent);
+
+    return () => {
+      stopSpeech();
+    };
   }, [selectedPersona]);
 
   useEffect(() => {

@@ -3,7 +3,7 @@ import { Theater, CheckCircle2, ArrowRight, Volume2, Mic, MicOff, Send, MessageS
 import { RoleplayScenario, ChatMessage, DialectType } from '../types';
 import { PRACTICAL_SCENARIOS } from '../data/scenariosData';
 import { aiManager } from '../core/AIManager';
-import { speakEnglishText, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
+import { speakEnglishText, stopSpeech, ACCENT_CONFIGS, SupportedAccent } from '../lib/speech';
 
 interface ScenarioStudioProps {
   activeDialect: DialectType;
@@ -14,7 +14,6 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({ activeDialect })
   const [scenarioMessages, setScenarioMessages] = useState<ChatMessage[]>([]);
   const [inputVal, setInputVal] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [completedObjectives, setCompletedObjectives] = useState<Record<string, boolean>>({});
   const [selectedAccent, setSelectedAccent] = useState<SupportedAccent>(activeDialect as SupportedAccent);
   const [filterDialect, setFilterDialect] = useState<'all' | 'english' | 'ar-IQ' | 'ar-LB'>('all');
@@ -27,6 +26,30 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({ activeDialect })
       setSelectedAccent(activeDialect as SupportedAccent);
     }
   }, [activeScenario, activeDialect]);
+
+  // Handle hardware / browser back button for active scenario
+  useEffect(() => {
+    const handlePopState = () => {
+      if (activeScenario) {
+        stopSpeech();
+        setActiveScenario(null);
+      }
+    };
+
+    if (activeScenario) {
+      window.history.pushState({ scenarioActive: true }, '');
+      window.addEventListener('popstate', handlePopState);
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [activeScenario]);
+
+  const handleExitScenario = () => {
+    stopSpeech();
+    setActiveScenario(null);
+  };
 
   const filteredScenarios = PRACTICAL_SCENARIOS.filter((sc) => {
     if (filterDialect === 'all') return true;
@@ -244,16 +267,38 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({ activeDialect })
         </div>
       ) : (
         /* Active Roleplay Session View */
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Sidebar Info */}
-          <div className="lg:col-span-1 space-y-4">
+        <div className="space-y-4">
+          {/* Top Navigation Bar with Back Button */}
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 flex items-center justify-between shadow-xs">
             <button
-              onClick={() => setActiveScenario(null)}
-              className="w-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+              onClick={handleExitScenario}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-xs"
             >
               <ArrowRight className="w-4 h-4" />
               <span>بازگشت به لیست سناریوها</span>
             </button>
+
+            <div className="flex items-center gap-2">
+              <span className="text-2xl p-1 bg-slate-50 rounded-xl border border-slate-200">
+                {activeScenario.aiPersona.avatar}
+              </span>
+              <div>
+                <h3 className="text-xs md:text-sm font-black text-slate-900">{activeScenario.titleFa}</h3>
+                <p className="text-[10px] text-slate-500 font-medium">{activeScenario.aiPersona.name} ({activeScenario.aiPersona.role})</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Sidebar Info */}
+            <div className="lg:col-span-1 space-y-4">
+              <button
+                onClick={handleExitScenario}
+                className="w-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+              >
+                <ArrowRight className="w-4 h-4" />
+                <span>بازگشت به لیست سناریوها</span>
+              </button>
 
             <div className="bg-white border border-slate-200/80 rounded-3xl p-5 space-y-4 shadow-xs">
               <div className="flex items-center gap-3 pb-3 border-b border-slate-200">
@@ -409,7 +454,8 @@ export const ScenarioStudio: React.FC<ScenarioStudioProps> = ({ activeDialect })
             </div>
           </div>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    )}
+  </div>
+);
 };

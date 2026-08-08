@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Volume2, Save, Sparkles, BookOpen } from 'lucide-react';
+import { X, Volume2, Save, Sparkles, BookOpen, ArrowRight } from 'lucide-react';
 import { DictionaryWord, DialectType } from '../types';
-import { speakEnglishText } from '../lib/speech';
+import { speakEnglishText, stopSpeech } from '../lib/speech';
 import { getStoredNotes, saveWordNote } from '../lib/offlineStorage';
 
 interface WordDetailModalProps {
@@ -24,24 +24,64 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
     }
   }, [word.id]);
 
+  useEffect(() => {
+    // Handle Escape key
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        stopSpeech();
+        onClose();
+      }
+    };
+
+    // Handle Popstate (browser / mobile back button)
+    const handlePopState = () => {
+      stopSpeech();
+      onClose();
+    };
+
+    window.history.pushState({ wordModalOpen: true }, '');
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [onClose]);
+
   const handleSaveNote = () => {
     saveWordNote(word.id, note);
     alert('یادداشت شما با موفقیت ذخیره شد!');
   };
 
+  const handleClose = () => {
+    stopSpeech();
+    onClose();
+  };
+
   return (
-    <div className="modal-overlay bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-lg w-full space-y-5 text-slate-800 max-h-[90vh] overflow-y-auto shadow-xl">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+    <div
+      className="modal-overlay bg-slate-900/60 backdrop-blur-xs p-4 z-50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
+      <div className="bg-white border border-slate-200 rounded-3xl p-5 md:p-6 max-w-lg w-full space-y-5 text-slate-800 max-h-[90vh] overflow-y-auto shadow-2xl relative">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 gap-2">
           <div className="flex items-center gap-2">
-            <h3 className="text-xl font-black text-slate-900" dir="ltr">{word.word}</h3>
-            <span className="text-xs font-mono text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full font-bold">
-              {word.phonetic}
-            </span>
+            <button
+              onClick={handleClose}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-200"
+            >
+              <ArrowRight className="w-4 h-4" />
+              <span>برگشت</span>
+            </button>
+            <h3 className="text-lg md:text-xl font-black text-slate-900" dir="ltr">{word.word}</h3>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+            title="بستن"
           >
             <X className="w-5 h-5" />
           </button>

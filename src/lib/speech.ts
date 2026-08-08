@@ -17,6 +17,41 @@ export const ACCENT_CONFIGS: AccentConfig[] = [
 
 let activeAudioFallback: HTMLAudioElement | null = null;
 
+// Pre-load voices on browser startup
+let cachedVoices: SpeechSynthesisVoice[] = [];
+
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  const loadVoices = () => {
+    try {
+      cachedVoices = window.speechSynthesis.getVoices();
+    } catch (e) {
+      // ignore
+    }
+  };
+  loadVoices();
+  if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }
+}
+
+export function stopSpeech(): void {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      // ignore
+    }
+  }
+  if (activeAudioFallback) {
+    try {
+      activeAudioFallback.pause();
+      activeAudioFallback = null;
+    } catch (e) {
+      // ignore
+    }
+  }
+}
+
 export function speakEnglishText(
   text: string,
   rate: number = 1.0,
@@ -30,38 +65,35 @@ export function speakEnglishText(
       return;
     }
 
+    stopSpeech();
+
     const cleanText = text.trim();
     let langCode: string = accent;
     if (accent === 'ar-IQ' || accent === 'ar-LB') {
       langCode = 'ar-SA';
     }
 
-    if (activeAudioFallback) {
-      try {
-        activeAudioFallback.pause();
-        activeAudioFallback = null;
-      } catch (e) {
-        // ignore
-      }
-    }
-
     const playAudioFallback = () => {
       try {
-        const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(
+        // Use client=gtx endpoint for reliable TTS playback
+        const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=gtx&tl=${encodeURIComponent(
           langCode
         )}&q=${encodeURIComponent(cleanText)}`;
         const audio = new Audio(audioUrl);
-        audio.playbackRate = rate;
+        audio.playbackRate = Math.min(Math.max(rate, 0.75), 1.25);
         activeAudioFallback = audio;
+
         audio.onended = () => {
           activeAudioFallback = null;
           resolve();
         };
+
         audio.onerror = () => {
           activeAudioFallback = null;
           playAudioToneFallback();
           resolve();
         };
+
         audio.play().catch(() => {
           playAudioToneFallback();
           resolve();
@@ -75,7 +107,10 @@ export function speakEnglishText(
     const playAudioToneFallback = () => {
       try {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioCtx) return;
+        if (!AudioCtx) {
+          resolve();
+          return;
+        }
         const ctx = new AudioCtx();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -90,21 +125,20 @@ export function speakEnglishText(
       } catch (e) {
         // ignore
       }
+      resolve();
     };
 
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
-        window.speechSynthesis.cancel();
-
         if (window.speechSynthesis.paused) {
           window.speechSynthesis.resume();
         }
 
         const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.lang = langCode;
-        utterance.rate = rate;
+        utterance.rate = Math.min(Math.max(rate, 0.6), 1.4);
 
-        // Calculate gender-appropriate pitch
+        // Adjust pitch according to gender preference
         if (gender === 'male') {
           utterance.pitch = Math.max(0.7, Math.min(pitch * 0.85, 0.95));
         } else {
@@ -113,28 +147,28 @@ export function speakEnglishText(
 
         (window as any)._activeUtteranceRef = utterance;
 
-        const voices = window.speechSynthesis.getVoices();
+        const voices = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
         const prefix = langCode.slice(0, 2);
 
-        // Language matching voices
+        // Find matching voices for the language
         const matchingLangVoices = voices.filter(
           (v) =>
             v.lang === langCode ||
             v.lang.replace('_', '-') === langCode ||
-            v.lang.startsWith(prefix)
+            v.lang.toLowerCase().startsWith(prefix.toLowerCase())
         );
 
         const MALE_KEYWORDS = [
           'male', 'david', 'mark', 'george', 'daniel', 'james', 'richard',
           'alex', 'brian', 'ryan', 'guy', 'stefan', 'maged', 'naayf', 'shakir',
           'tarik', 'thomas', 'oliver', 'paul', 'rishi', 'fred', 'dylan', 'john',
-          'mike', 'steven', 'tom', 'sam', 'male'
+          'mike', 'steven', 'tom', 'sam'
         ];
 
         const FEMALE_KEYWORDS = [
           'female', 'zira', 'samantha', 'victoria', 'karen', 'mona', 'salma',
           'laila', 'hazel', 'jenny', 'aria', 'sonia', 'emma', 'susan', 'fiona',
-          'veena', 'female'
+          'veena'
         ];
 
         let selectedVoice: SpeechSynthesisVoice | undefined;
@@ -149,7 +183,6 @@ export function speakEnglishText(
           );
         }
 
-        // Fallback to first matching lang voice if specific gender voice not named explicitly
         if (!selectedVoice && matchingLangVoices.length > 0) {
           selectedVoice = matchingLangVoices[0];
         }
@@ -158,34 +191,41 @@ export function speakEnglishText(
           utterance.voice = selectedVoice;
         }
 
-        let hasResolved = false;
+        let hasEnded = false;
         const safeResolve = () => {
-          if (!hasResolved) {
-            hasResolved = true;
+          if (!hasEnded) {
+            hasEnded = true;
             (window as any)._activeUtteranceRef = null;
             resolve();
           }
         };
 
-        const timeoutId = setTimeout(() => {
-          if (!hasResolved) {
-            window.speechSynthesis.cancel();
-            playAudioFallback();
+        // Safety fallback after 15 seconds if utterance hangs
+        const safetyTimeout = setTimeout(() => {
+          if (!hasEnded) {
+            hasEnded = true;
+            try {
+              window.speechSynthesis.cancel();
+            } catch (e) {
+              // ignore
+            }
+            resolve();
           }
-        }, Math.max(2500, cleanText.length * 200));
+        }, Math.max(10000, cleanText.length * 400));
 
         utterance.onend = () => {
-          clearTimeout(timeoutId);
+          clearTimeout(safetyTimeout);
           safeResolve();
         };
 
         utterance.onerror = () => {
-          clearTimeout(timeoutId);
+          clearTimeout(safetyTimeout);
           playAudioFallback();
         };
 
         window.speechSynthesis.speak(utterance);
 
+        // Resume if browser suspended speechSynthesis
         if (window.speechSynthesis.speaking) {
           window.speechSynthesis.resume();
         }
@@ -199,3 +239,4 @@ export function speakEnglishText(
     playAudioFallback();
   });
 }
+
