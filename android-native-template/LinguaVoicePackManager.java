@@ -78,7 +78,7 @@ public final class LinguaVoicePackManager {
                 if(expectedSha256!=null && !expectedSha256.isEmpty() && !expectedSha256.equalsIgnoreCase(sha256(tmp))) throw new IllegalStateException("SHA-256 mismatch");
                 File staging=new File(root,id+".staging"); deleteRecursively(staging); staging.mkdirs(); unzip(tmp,staging); deleteRecursively(target); if(!staging.renameTo(target)) throw new IllegalStateException("Could not install pack"); tmp.delete();
                 js("__linguaVoicePackDone", "{\"ok\":true}");
-            } } catch(Exception e){ js("__linguaVoicePackDone", "{\"ok\":false,\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}"); }
+            } catch(Exception e){ js("__linguaVoicePackDone", "{\"ok\":false,\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}"); }
         }).start();
     }
 
