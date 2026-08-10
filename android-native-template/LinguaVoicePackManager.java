@@ -91,4 +91,5 @@ public final class LinguaVoicePackManager {
     private static long sizeOf(File f){ if(f.isFile()) return f.length(); long s=0; File[] fs=f.listFiles(); if(fs!=null) for(File x:fs)s+=sizeOf(x); return s; }
     private static void deleteRecursively(File f){ if(!f.exists())return; File[] fs=f.listFiles(); if(fs!=null)for(File x:fs)deleteRecursively(x); f.delete(); }
     private static void unzip(File zip, File out) throws Exception { try(ZipInputStream zin=new ZipInputStream(new BufferedInputStream(new FileInputStream(zip)))){ ZipEntry e; byte[] b=new byte[64*1024]; while((e=zin.getNextEntry())!=null){ File dest=new File(out,e.getName()); String cp=dest.getCanonicalPath(); if(!cp.startsWith(out.getCanonicalPath()+File.separator)) throw new SecurityException("zip-slip"); if(e.isDirectory()){dest.mkdirs();continue;} File parent=dest.getParentFile();if(parent!=null)parent.mkdirs();try(FileOutputStream fos=new FileOutputStream(dest)){int n;while((n=zin.read(b))!=-1)fos.write(b,0,n);} } } }
-    private stat
+    private static String sha256(File f) throws Exception { MessageDigest md=MessageDigest.getInstance("SHA-256"); try(InputStream in=new FileInputStream(f)){byte[] b=new byte[1024*1024];int n;while((n=in.read(b))!=-1)md.update(b,0,n);} StringBuilder s=new StringBuilder();for(byte x:md.digest())s.append(String.format("%02x",x));return s.toString(); }
+}
