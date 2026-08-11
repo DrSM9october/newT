@@ -69,7 +69,7 @@ export const CHAT_PERSONAS: Persona[] = [
     gender: 'male',
     mood: 'witty',
     avatar: '🧔',
-    dialect: 'en-AU',
+    dialect: 'en-US',
     descriptionFa: 'مکالمه همراه با شوخی‌های بانمک، اصطلاحات جالب و لهجه جذابی استرالیایی (Aussie slang).',
     greetingEn: "G'day mate! Ready for a fun banter? Tell me something funny that happened to you!",
     greetingFa: 'روز بخیر رفیق! آماده‌ای یه گپ باحال و خنده‌دار بزنیم؟ یه اتفاق بامزه که برات افتاده رو بگو!',
