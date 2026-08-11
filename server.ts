@@ -231,51 +231,527 @@ Return valid JSON with:
   }
 });
 
-// 4. Server-Side TTS Proxy Endpoint (solves browser CORS and audio playback blocks)
-app.get('/api/tts', async (req, res) => {
-  try {
-    const text = (req.query.text as string || '').trim();
-    let lang = (req.query.lang as string || 'en-US').trim();
+// 4. Multi-provider TTS API
+//
+// Supported providers:
+// - google
+// - azure
+// - elevenlabs
+//
+// Native Android TTS is handled inside the APK.
+// API keys MUST stay on the server.
 
-    if (!text) {
-      return res.status(400).send('Text parameter is required');
-    }
+type TtsProvider =
+  | 'google'
+  | 'azure'
+  | 'elevenlabs';
 
-    // Map dialect codes to Google Translate TTS ISO codes
-    if (lang === 'ar-IQ' || lang === 'ar-LB') {
-      lang = 'ar';
-    } else if (lang.startsWith('en')) {
-      lang = 'en';
-    }
+function normalizeTtsLanguage(
+  lang: string
+): string {
+  if (!lang) return 'en-US';
 
-    // Construct Google TTS audio stream URL
-    const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(text.slice(0, 300))}`;
-
-    const audioRes = await fetch(googleTtsUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'audio/mpeg, audio/*',
-      }
-    });
-
-    if (!audioRes.ok) {
-      throw new Error(`TTS upstream status: ${audioRes.status}`);
-    }
-
-    const arrayBuffer = await audioRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Content-Length', buffer.length.toString());
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.send(buffer);
-  } catch (error: any) {
-    console.error('Error proxying TTS audio:', error);
-    return res.status(500).send('Failed to generate audio');
+  if (lang === 'ar-IQ') return 'ar-IQ';
+  if (lang === 'ar-LB') return 'ar-LB';
+  if (lang === 'en-GB') return 'en-GB';
+  if (lang === 'en-AU') return 'en-AU';
+  if (lang === 'fa' || lang === 'fa-IR') {
+    return 'fa-IR';
   }
-});
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`LinguaAI server running on port ${PORT}`);
-});
+  return 'en-US';
+}
+
+function googleVoiceFor(
+  lang: string
+): string {
+  switch (lang) {
+    case 'en-GB':
+      return 'en-GB-Neural2-A';
+
+    case 'en-AU':
+      return 'en-AU-Neural2-A';
+
+    case 'ar-IQ':
+      return 'ar-XA-Wavenet-A';
+
+    case 'ar-LB':
+      return 'ar-XA-Wavenet-A';
+
+    case 'fa-IR':
+      return 'fa-IR-Wavenet-A';
+
+    case 'en-US':
+    default:
+      return 'en-US-Neural2-F';
+  }
+}
+
+function azureVoiceFor(
+  lang: string
+): string {
+  switch (lang) {
+    case 'en-GB':
+      return 'en-GB-SoniaNeural';
+
+    case 'en-AU':
+      return 'en-AU-NatashaNeural';
+
+    case 'ar-IQ':
+      return 'ar-IQ-RanaNeural';
+
+    case 'ar-LB':
+      return 'ar-LB-LaylaNeural';
+
+    case 'fa-IR':
+      return 'fa-IR-DilaraNeural';
+
+    case 'en-US':
+    default:
+      return 'en-US-JennyNeural';
+  }
+}
+
+function elevenLabsVoiceFor(): string {
+  return (
+    process.env.ELEVENLABS_VOICE_ID ||
+    ''
+  );
+}
+
+function clampRate(
+  value: unknown
+): number {
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 1;
+  }
+
+  return Math.max(
+    0.5,
+    Math.min(number, 2)
+  );
+}
+
+function clampPitch(
+  value: unknown
+): number {
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 1;
+  }
+
+  return Math.max(
+    0.5,
+    Math.min(number, 2)
+  );
+}
+
+function escapeXml(
+  value: string
+): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+async function googleTts(
+  text: string,
+  lang: string,
+  rate: number,
+  pitch: number
+): Promise<Buffer> {
+
+  const apiKey =
+    process.env.GOOGLE_TTS_API_KEY ||
+    '';
+
+  if (!apiKey) {
+    throw new Error(
+      'GOOGLE_TTS_API_KEY is not configured'
+    );
+  }
+
+  const response =
+    await fetch(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+
+        headers: {
+          'Content-Type':
+            'application/json',
+        },
+
+        body: JSON.stringify({
+          input: {
+            text: text.slice(0, 5000),
+          },
+
+          voice: {
+            languageCode: lang,
+            name: googleVoiceFor(lang),
+          },
+
+          audioConfig: {
+            audioEncoding: 'MP3',
+            speakingRate: rate,
+            pitch:
+              (pitch - 1) * 8,
+          },
+        }),
+      }
+    );
+
+  if (!response.ok) {
+
+    const body =
+      await response.text();
+
+    throw new Error(
+      `Google TTS ${response.status}: ${body.slice(0, 500)}`
+    );
+  }
+
+  const data =
+    await response.json() as {
+      audioContent?: string;
+    };
+
+  if (!data.audioContent) {
+    throw new Error(
+      'Google TTS returned no audio'
+    );
+  }
+
+  return Buffer.from(
+    data.audioContent,
+    'base64'
+  );
+}
+
+async function azureTts(
+  text: string,
+  lang: string,
+  rate: number,
+  pitch: number
+): Promise<Buffer> {
+
+  const key =
+    process.env.AZURE_SPEECH_KEY ||
+    '';
+
+  const region =
+    process.env.AZURE_SPEECH_REGION ||
+    '';
+
+  if (!key) {
+    throw new Error(
+      'AZURE_SPEECH_KEY is not configured'
+    );
+  }
+
+  if (!region) {
+    throw new Error(
+      'AZURE_SPEECH_REGION is not configured'
+    );
+  }
+
+  const voice =
+    azureVoiceFor(lang);
+
+  const ratePercent =
+    Math.round(
+      (rate - 1) * 100
+    );
+
+  const pitchPercent =
+    Math.round(
+      (pitch - 1) * 100
+    );
+
+  const rateString =
+    `${ratePercent >= 0 ? '+' : ''}${ratePercent}%`;
+
+  const pitchString =
+    `${pitchPercent >= 0 ? '+' : ''}${pitchPercent}%`;
+
+  const safeText =
+    escapeXml(
+      text.slice(0, 5000)
+    );
+
+  const ssml =
+    `<speak version="1.0" ` +
+    `xmlns="http://www.w3.org/2001/10/synthesis" ` +
+    `xml:lang="${lang}">` +
+    `<voice name="${voice}">` +
+    `<prosody rate="${rateString}" pitch="${pitchString}">` +
+    `${safeText}` +
+    `</prosody>` +
+    `</voice>` +
+    `</speak>`;
+
+  const response =
+    await fetch(
+      `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`,
+      {
+        method: 'POST',
+
+        headers: {
+          'Ocp-Apim-Subscription-Key':
+            key,
+
+          'Content-Type':
+            'application/ssml+xml',
+
+          'X-Microsoft-OutputFormat':
+            'audio-24khz-48kbitrate-mono-mp3',
+
+          'User-Agent':
+            'LinguaAI',
+        },
+
+        body: ssml,
+      }
+    );
+
+  if (!response.ok) {
+
+    const body =
+      await response.text();
+
+    throw new Error(
+      `Azure TTS ${response.status}: ${body.slice(0, 500)}`
+    );
+  }
+
+  return Buffer.from(
+    await response.arrayBuffer()
+  );
+}
+
+async function elevenLabsTts(
+  text: string,
+  lang: string,
+  rate: number,
+  pitch: number
+): Promise<Buffer> {
+
+  const apiKey =
+    process.env.ELEVENLABS_API_KEY ||
+    '';
+
+  const voiceId =
+    elevenLabsVoiceFor();
+
+  if (!apiKey) {
+    throw new Error(
+      'ELEVENLABS_API_KEY is not configured'
+    );
+  }
+
+  if (!voiceId) {
+    throw new Error(
+      'ELEVENLABS_VOICE_ID is not configured'
+    );
+  }
+
+  const response =
+    await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
+      {
+        method: 'POST',
+
+        headers: {
+          'xi-api-key':
+            apiKey,
+
+          'Content-Type':
+            'application/json',
+
+          'Accept':
+            'audio/mpeg',
+        },
+
+        body: JSON.stringify({
+          text: text.slice(0, 5000),
+
+          model_id:
+            'eleven_multilingual_v2',
+
+          language_code:
+            lang,
+
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+            style: 0.2,
+            use_speaker_boost: true,
+          },
+        }),
+      }
+    );
+
+  if (!response.ok) {
+
+    const body =
+      await response.text();
+
+    throw new Error(
+      `ElevenLabs TTS ${response.status}: ${body.slice(0, 500)}`
+    );
+  }
+
+  return Buffer.from(
+    await response.arrayBuffer()
+  );
+}
+
+app.post(
+  '/api/tts',
+  async (req, res) => {
+
+    try {
+
+      const text =
+        String(
+          req.body?.text || ''
+        ).trim();
+
+      const provider =
+        String(
+          req.body?.provider || 'google'
+        ) as TtsProvider;
+
+      const lang =
+        normalizeTtsLanguage(
+          String(
+            req.body?.lang ||
+              'en-US'
+          )
+        );
+
+      const rate =
+        clampRate(
+          req.body?.rate
+        );
+
+      const pitch =
+        clampPitch(
+          req.body?.pitch
+        );
+
+      if (!text) {
+
+        return res
+          .status(400)
+          .json({
+            error:
+              'Text parameter is required',
+          });
+      }
+
+      let audio: Buffer;
+
+      switch (provider) {
+
+        case 'google':
+
+          audio =
+            await googleTts(
+              text,
+              lang,
+              rate,
+              pitch
+            );
+
+          break;
+
+        case 'azure':
+
+          audio =
+            await azureTts(
+              text,
+              lang,
+              rate,
+              pitch
+            );
+
+          break;
+
+        case 'elevenlabs':
+
+          audio =
+            await elevenLabsTts(
+              text,
+              lang,
+              rate,
+              pitch
+            );
+
+          break;
+
+        default:
+
+          return res
+            .status(400)
+            .json({
+              error:
+                `Unsupported TTS provider: ${provider}`,
+            });
+      }
+
+      res.setHeader(
+        'Content-Type',
+        'audio/mpeg'
+      );
+
+      res.setHeader(
+        'Content-Length',
+        audio.length.toString()
+      );
+
+      res.setHeader(
+        'Cache-Control',
+        'private, max-age=3600'
+      );
+
+      return res.send(audio);
+
+    } catch (error: any) {
+
+      console.error(
+        'Error in /api/tts:',
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          error:
+            error?.message ||
+            'Failed to generate TTS audio',
+        });
+    }
+  }
+);
+
+const PORT =
+  process.env.PORT || 3000;
+
+app.listen(
+  PORT,
+  () => {
+    console.log(
+      `LinguaAI server running on port ${PORT}`
+    );
+  }
+);
