@@ -3,7 +3,6 @@ export type DialectType =
   | 'fa-IR'
   | 'en-US'
   | 'en-GB'
-  | 'en-AU'
   | 'ar-IQ'
   | 'ar-LB';
 
