@@ -1,29 +1,32 @@
 # Dependencies
 node_modules/
-.pnpm-store/
 
-# Production build output
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Build
 dist/
-dist-ssr/
-*.local
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 
-# Capacitor / Android build outputs
-android/app/build/
-android/build/
-android/.gradle/
-android/captures/
-android/.idea/
-*.keystore
+# IDE
+.vscode/
+.idea/
 
-# Editor & OS files
+# OS
 .DS_Store
 Thumbs.db
-.vscode/*
-!.vscode/extensions.json
-.idea/
+
+# Capacitor / Android generated files
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+
+# Local files
+*.local
