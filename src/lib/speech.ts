@@ -1,4 +1,6 @@
 export type SupportedAccent =
+  | 'fa'
+  | 'fa-IR'
   | 'en-US'
   | 'en-GB'
   | 'en-AU'
@@ -8,6 +10,7 @@ export type SupportedAccent =
 export type TtsProvider =
   | 'auto'
   | 'native'
+  | 'web'
   | 'google'
   | 'azure'
   | 'elevenlabs';
@@ -20,6 +23,12 @@ export interface AccentConfig {
 }
 
 export const ACCENT_CONFIGS: AccentConfig[] = [
+  {
+    code: 'fa-IR',
+    labelFa: 'فارسی',
+    labelEn: 'Persian',
+    flag: '🇮🇷',
+  },
   {
     code: 'en-US',
     labelFa: 'آمریکایی (US)',
@@ -98,6 +107,7 @@ export function getTtsProvider(): TtsProvider {
     if (
       value === 'auto' ||
       value === 'native' ||
+      value === 'web' ||
       value === 'google' ||
       value === 'azure' ||
       value === 'elevenlabs'
@@ -121,10 +131,14 @@ export function setTtsProvider(provider: TtsProvider): void {
   }
 }
 
-export function getTtsProviderLabel(provider: TtsProvider): string {
+export function getTtsProviderLabel(
+  provider: TtsProvider
+): string {
   switch (provider) {
     case 'native':
       return 'Android Native';
+    case 'web':
+      return 'Web Speech';
     case 'google':
       return 'Google Cloud';
     case 'azure':
@@ -133,7 +147,7 @@ export function getTtsProviderLabel(provider: TtsProvider): string {
       return 'ElevenLabs';
     case 'auto':
     default:
-      return 'خودکار (Auto)';
+      return 'خودکار (Native → Web → Cloud)';
   }
 }
 
@@ -145,6 +159,7 @@ function cleanupAudio(): void {
     } catch {
       // ignore
     }
+
     activeAudio = null;
   }
 
@@ -154,6 +169,7 @@ function cleanupAudio(): void {
     } catch {
       // ignore
     }
+
     activeObjectUrl = null;
   }
 }
@@ -183,24 +199,43 @@ export function stopSpeech(): void {
   cleanupAudio();
 }
 
-function normalizeLanguage(accent: SupportedAccent): string {
-  if (accent === 'ar-IQ' || accent === 'ar-LB') {
+function normalizeLanguage(
+  accent: SupportedAccent
+): string {
+  if (accent === 'fa') {
+    return 'fa-IR';
+  }
+
+  if (
+    accent === 'ar-IQ' ||
+    accent === 'ar-LB'
+  ) {
     return 'ar';
   }
 
   return accent;
 }
 
-function getNativeLanguage(accent: SupportedAccent): string {
+function getNativeLanguage(
+  accent: SupportedAccent
+): string {
   switch (accent) {
+    case 'fa':
+    case 'fa-IR':
+      return 'fa-IR';
+
     case 'en-GB':
       return 'en-GB';
+
     case 'en-AU':
       return 'en-AU';
+
     case 'ar-IQ':
       return 'ar-IQ';
+
     case 'ar-LB':
       return 'ar-LB';
+
     case 'en-US':
     default:
       return 'en-US';
@@ -216,73 +251,136 @@ function nativeSpeak(
   return new Promise((resolve, reject) => {
     const native = getNativeBridge();
 
-    if (!native || typeof native.speak !== 'function') {
-      reject(new Error('native-tts-unavailable'));
+    if (
+      !native ||
+      typeof native.speak !== 'function'
+    ) {
+      reject(
+        new Error('native-tts-unavailable')
+      );
       return;
     }
 
     const requestId =
-      `tts-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      `tts-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}`;
 
     let finished = false;
+    let timeoutId: ReturnType<
+      typeof setTimeout
+    > | null = null;
+
+    const cleanupCallbacks = () => {
+      try {
+        delete (window as any)
+          .__linguaNativeTtsStarted;
+      } catch {
+        // ignore
+      }
+
+      try {
+        delete (window as any)
+          .__linguaNativeTtsDone;
+      } catch {
+        // ignore
+      }
+
+      try {
+        delete (window as any)
+          .__linguaNativeTtsError;
+      } catch {
+        // ignore
+      }
+
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
 
     const finish = () => {
       if (finished) return;
+
       finished = true;
-
-      try {
-        delete (window as any).__linguaNativeTtsDone;
-      } catch {
-        // ignore
-      }
-
+      cleanupCallbacks();
       resolve();
     };
 
-    const fail = () => {
+    const fail = (
+      errorMessage = 'native-tts-error'
+    ) => {
       if (finished) return;
+
       finished = true;
-
-      try {
-        delete (window as any).__linguaNativeTtsDone;
-      } catch {
-        // ignore
-      }
-
-      reject(new Error('native-tts-error'));
+      cleanupCallbacks();
+      reject(new Error(errorMessage));
     };
 
     if (typeof window !== 'undefined') {
-      (window as any).__linguaNativeTtsDone = (id: string) => {
-        if (id === requestId) {
-          finish();
-        }
-      };
+      (window as any)
+        .__linguaNativeTtsStarted =
+        (id: string) => {
+          if (id === requestId) {
+            // Native playback has started.
+          }
+        };
+
+      (window as any)
+        .__linguaNativeTtsDone =
+        (id: string) => {
+          if (id === requestId) {
+            finish();
+          }
+        };
+
+      (window as any)
+        .__linguaNativeTtsError =
+        (id: string) => {
+          if (
+            id === requestId ||
+            id === 'native-tts-error'
+          ) {
+            fail();
+          }
+        };
     }
 
     try {
       native.speak(
         text,
         getNativeLanguage(accent),
-        Math.min(Math.max(rate, 0.1), 2.0),
-        Math.min(Math.max(pitch, 0.1), 2.0),
+        Math.min(
+          Math.max(rate, 0.1),
+          2.0
+        ),
+        Math.min(
+          Math.max(pitch, 0.1),
+          2.0
+        ),
         requestId
       );
-    } catch (error) {
+    } catch {
       fail();
       return;
     }
 
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
       if (!finished) {
-        fail();
+        fail('native-tts-timeout');
       }
-    }, Math.max(15000, text.length * 500));
+    }, Math.max(
+      15000,
+      text.length * 500
+    ));
   });
 }
 
 async function serverSpeak(
-  provider: Exclude<TtsProvider, 'auto' | 'native'>,
+  provider:
+    | 'google'
+    | 'azure'
+    | 'elevenlabs',
   text: string,
   rate: number,
   accent: SupportedAccent,
@@ -290,27 +388,41 @@ async function serverSpeak(
 ): Promise<void> {
   const baseUrl = getApiBaseUrl();
 
-  const endpoint = `${baseUrl}/api/tts`;
+  if (!baseUrl) {
+    throw new Error(
+      'cloud-tts-not-configured'
+    );
+  }
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      provider,
-      text,
-      lang: accent,
-      rate,
-      pitch,
-    }),
-  });
+  const endpoint =
+    `${baseUrl}/api/tts`;
+
+  const response = await fetch(
+    endpoint,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type':
+          'application/json',
+      },
+      body: JSON.stringify({
+        provider,
+        text,
+        lang: accent,
+        rate,
+        pitch,
+      }),
+    }
+  );
 
   if (!response.ok) {
-    let message = `tts-http-${response.status}`;
+    let message =
+      `tts-http-${response.status}`;
 
     try {
-      const data = await response.json();
+      const data =
+        await response.json();
+
       if (data?.error) {
         message = data.error;
       }
@@ -322,60 +434,77 @@ async function serverSpeak(
   }
 
   const contentType =
-    response.headers.get('content-type') || '';
+    response.headers.get(
+      'content-type'
+    ) || '';
 
   if (!contentType.includes('audio')) {
-    throw new Error('tts-invalid-audio-response');
+    throw new Error(
+      'tts-invalid-audio-response'
+    );
   }
 
-  const blob = await response.blob();
+  const blob =
+    await response.blob();
 
   if (!blob.size) {
-    throw new Error('tts-empty-audio');
+    throw new Error(
+      'tts-empty-audio'
+    );
   }
 
   cleanupAudio();
 
-  const objectUrl = URL.createObjectURL(blob);
-  activeObjectUrl = objectUrl;
+  const objectUrl =
+    URL.createObjectURL(blob);
 
-  const audio = new Audio(objectUrl);
+  activeObjectUrl =
+    objectUrl;
+
+  const audio =
+    new Audio(objectUrl);
+
   activeAudio = audio;
 
-  audio.playbackRate = Math.min(
-    Math.max(rate, 0.5),
-    2.0
+  audio.playbackRate =
+    Math.min(
+      Math.max(rate, 0.5),
+      2.0
+    );
+
+  await new Promise<void>(
+    (resolve, reject) => {
+      let done = false;
+
+      const finish = () => {
+        if (done) return;
+
+        done = true;
+        cleanupAudio();
+        resolve();
+      };
+
+      const fail = () => {
+        if (done) return;
+
+        done = true;
+        cleanupAudio();
+
+        reject(
+          new Error(
+            'tts-audio-playback-failed'
+          )
+        );
+      };
+
+      audio.onended = finish;
+      audio.onerror = fail;
+
+      audio
+        .play()
+        .catch(fail);
+    }
   );
-
-  await new Promise<void>((resolve, reject) => {
-    let done = false;
-
-    const finish = () => {
-      if (done) return;
-      done = true;
-
-      cleanupAudio();
-      resolve();
-    };
-
-    const fail = () => {
-      if (done) return;
-      done = true;
-
-      cleanupAudio();
-      reject(new Error('tts-audio-playback-failed'));
-    };
-
-    audio.onended = finish;
-    audio.onerror = fail;
-
-    audio
-      .play()
-      .then(() => {
-        // playback started
-      })
-      .catch(fail);
-  });
 }
 
 function webSpeechSpeak(
@@ -385,90 +514,159 @@ function webSpeechSpeak(
   pitch: number,
   gender: 'male' | 'female'
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (
-      typeof window === 'undefined' ||
-      !('speechSynthesis' in window)
-    ) {
-      reject(new Error('web-speech-unavailable'));
-      return;
-    }
-
-    try {
-      const langCode = normalizeLanguage(accent);
-
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
+  return new Promise(
+    (resolve, reject) => {
+      if (
+        typeof window ===
+          'undefined' ||
+        !(
+          'speechSynthesis'
+          in window
+        )
+      ) {
+        reject(
+          new Error(
+            'web-speech-unavailable'
+          )
+        );
+        return;
       }
 
-      const utterance = new SpeechSynthesisUtterance(text);
+      try {
+        const langCode =
+          normalizeLanguage(
+            accent
+          );
 
-      utterance.lang = langCode;
-      utterance.rate = Math.min(
-        Math.max(rate, 0.6),
-        1.4
-      );
-
-      utterance.pitch =
-        gender === 'male'
-          ? Math.max(
-              0.7,
-              Math.min(pitch * 0.85, 0.95)
-            )
-          : Math.min(
-              1.3,
-              Math.max(pitch * 1.05, 1.0)
-            );
-
-      const voices =
-        cachedVoices.length > 0
-          ? cachedVoices
-          : window.speechSynthesis.getVoices();
-
-      const prefix = langCode.slice(0, 2).toLowerCase();
-
-      const matchingVoices = voices.filter(
-        (voice) =>
-          voice.lang === langCode ||
-          voice.lang.replace('_', '-') === langCode ||
-          voice.lang
-            .toLowerCase()
-            .startsWith(prefix)
-      );
-
-      if (matchingVoices.length > 0) {
-        utterance.voice = matchingVoices[0];
-      }
-
-      let finished = false;
-
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        resolve();
-      };
-
-      const fail = () => {
-        if (finished) return;
-        finished = true;
-        reject(new Error('web-speech-error'));
-      };
-
-      utterance.onend = finish;
-      utterance.onerror = fail;
-
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-
-      setTimeout(() => {
-        if (!finished) {
-          finish();
+        if (
+          window.speechSynthesis
+            .paused
+        ) {
+          window.speechSynthesis
+            .resume();
         }
-      }, Math.max(5000, text.length * 250));
-    } catch (error) {
-      reject(error);
+
+        const utterance =
+          new SpeechSynthesisUtterance(
+            text
+          );
+
+        utterance.lang =
+          langCode;
+
+        utterance.rate =
+          Math.min(
+            Math.max(
+              rate,
+              0.6
+            ),
+            1.4
+          );
+
+        utterance.pitch =
+          gender === 'male'
+            ? Math.max(
+                0.7,
+                Math.min(
+                  pitch * 0.85,
+                  0.95
+                )
+              )
+            : Math.min(
+                1.3,
+                Math.max(
+                  pitch * 1.05,
+                  1.0
+                )
+              );
+
+        const voices =
+          cachedVoices.length > 0
+            ? cachedVoices
+            : window.speechSynthesis
+                .getVoices();
+
+        const prefix =
+          langCode
+            .slice(0, 2)
+            .toLowerCase();
+
+        const matchingVoices =
+          voices.filter(
+            (voice) => {
+              const voiceLang =
+                voice.lang
+                  .replace(
+                    '_',
+                    '-'
+                  )
+                  .toLowerCase();
+
+              return (
+                voiceLang ===
+                  langCode.toLowerCase() ||
+                voiceLang.startsWith(
+                  prefix
+                )
+              );
+            }
+          );
+
+        if (
+          matchingVoices.length > 0
+        ) {
+          utterance.voice =
+            matchingVoices[0];
+        }
+
+        let finished = false;
+
+        const finish = () => {
+          if (finished) return;
+
+          finished = true;
+          resolve();
+        };
+
+        const fail = () => {
+          if (finished) return;
+
+          finished = true;
+
+          reject(
+            new Error(
+              'web-speech-error'
+            )
+          );
+        };
+
+        utterance.onend =
+          finish;
+
+        utterance.onerror =
+          fail;
+
+        window.speechSynthesis
+          .cancel();
+
+        window.speechSynthesis
+          .speak(
+            utterance
+          );
+
+        setTimeout(() => {
+          if (!finished) {
+            finish();
+          }
+        }, Math.max(
+          5000,
+          text.length * 250
+        ));
+      } catch (error) {
+        reject(error);
+      }
     }
-  });
+  );
 }
 
 async function speakWithProvider(
@@ -486,6 +684,19 @@ async function speakWithProvider(
       accent,
       pitch
     );
+
+    return;
+  }
+
+  if (provider === 'web') {
+    await webSpeechSpeak(
+      text,
+      rate,
+      accent,
+      pitch,
+      gender
+    );
+
     return;
   }
 
@@ -501,25 +712,86 @@ async function speakWithProvider(
       accent,
       pitch
     );
+
     return;
   }
 
   if (provider === 'auto') {
-    let onlineProvider: TtsProvider = 'google';
+    /*
+     * مهم:
+     * Native باید اولین انتخاب باشد.
+     * بنابراین برنامه بدون اینترنت
+     * و بدون API Key هم صدا خواهد داشت.
+     */
 
     try {
-      if (typeof window !== 'undefined') {
-        const savedOnlineProvider =
-          window.localStorage.getItem(
-            'linguaai-online-tts-provider'
-          );
+      await nativeSpeak(
+        text,
+        rate,
+        accent,
+        pitch
+      );
+
+      return;
+    } catch (nativeError) {
+      console.warn(
+        '[LinguaAI TTS] Native failed:',
+        nativeError
+      );
+    }
+
+    /*
+     * مرحله دوم:
+     * Web Speech
+     */
+
+    try {
+      await webSpeechSpeak(
+        text,
+        rate,
+        accent,
+        pitch,
+        gender
+      );
+
+      return;
+    } catch (webError) {
+      console.warn(
+        '[LinguaAI TTS] Web Speech failed:',
+        webError
+      );
+    }
+
+    /*
+     * مرحله سوم:
+     * Cloud فقط در صورت وجود
+     * backend/API configuration.
+     */
+
+    let onlineProvider:
+      | 'google'
+      | 'azure'
+      | 'elevenlabs' =
+      'google';
+
+    try {
+      if (
+        typeof window !==
+        'undefined'
+      ) {
+        const saved =
+          window.localStorage
+            .getItem(
+              'linguaai-online-tts-provider'
+            );
 
         if (
-          savedOnlineProvider === 'google' ||
-          savedOnlineProvider === 'azure' ||
-          savedOnlineProvider === 'elevenlabs'
+          saved === 'google' ||
+          saved === 'azure' ||
+          saved === 'elevenlabs'
         ) {
-          onlineProvider = savedOnlineProvider;
+          onlineProvider =
+            saved;
         }
       }
     } catch {
@@ -534,87 +806,89 @@ async function speakWithProvider(
         accent,
         pitch
       );
-      return;
-    } catch {
-      // Continue to Native.
-    }
 
-    try {
-      await nativeSpeak(
-        text,
-        rate,
-        accent,
-        pitch
+      return;
+    } catch (cloudError) {
+      console.warn(
+        '[LinguaAI TTS] Cloud failed:',
+        cloudError
       );
-      return;
-    } catch {
-      // Continue to browser speech.
     }
 
-    await webSpeechSpeak(
-      text,
-      rate,
-      accent,
-      pitch,
-      gender
+    throw new Error(
+      'all-tts-providers-failed'
     );
-
-    return;
   }
 
-  throw new Error('unsupported-tts-provider');
+  throw new Error(
+    'unsupported-tts-provider'
+  );
 }
 
 export function speakEnglishText(
   text: string,
   rate: number = 1.0,
-  accent: SupportedAccent = 'en-US',
+  accent: SupportedAccent =
+    'en-US',
   pitch: number = 1.0,
-  gender: 'male' | 'female' = 'female'
+  gender:
+    | 'male'
+    | 'female' = 'female'
 ): Promise<void> {
-  return new Promise(async (resolve, reject) => {
-    const cleanText = text?.trim();
+  return new Promise(
+    async (
+      resolve,
+      reject
+    ) => {
+      const cleanText =
+        text?.trim();
 
-    if (!cleanText) {
-      resolve();
-      return;
+      if (!cleanText) {
+        resolve();
+        return;
+      }
+
+      stopSpeech();
+
+      const provider =
+        getTtsProvider();
+
+      try {
+        await speakWithProvider(
+          provider,
+          cleanText,
+          rate,
+          accent,
+          pitch,
+          gender
+        );
+
+        resolve();
+      } catch (error) {
+        console.error(
+          '[LinguaAI TTS] Speech failed:',
+          error
+        );
+
+        /*
+         * هرگز صدای تق مصنوعی
+         * پخش نکن.
+         */
+        reject(error);
+      }
     }
-
-    stopSpeech();
-
-    const provider = getTtsProvider();
-
-    try {
-      await speakWithProvider(
-        provider,
-        cleanText,
-        rate,
-        accent,
-        pitch,
-        gender
-      );
-
-      resolve();
-    } catch (error) {
-      console.error(
-        '[LinguaAI TTS] Speech failed:',
-        error
-      );
-
-      // Important:
-      // Never play a fake beep as a TTS fallback.
-      reject(error);
-    }
-  });
+  );
 }
 
 export function isNativeTtsAvailable(): boolean {
-  const native = getNativeBridge();
+  const native =
+    getNativeBridge();
 
   try {
     return !!(
       native &&
-      typeof native.isAvailable === 'function' &&
+      typeof native.isAvailable ===
+        'function' &&
       native.isAvailable()
     );
   } catch {
@@ -622,37 +896,48 @@ export function isNativeTtsAvailable(): boolean {
   }
 }
 
-export function getAvailableTtsProviders(): TtsProvider[] {
+export function getAvailableTtsProviders():
+  TtsProvider[] {
   return [
     'auto',
     'native',
+    'web',
     'google',
     'azure',
     'elevenlabs',
   ];
 }
 
-// Pre-load browser voices.
+/*
+ * Pre-load browser voices.
+ */
+
 if (
-  typeof window !== 'undefined' &&
-  'speechSynthesis' in window
+  typeof window !==
+    'undefined' &&
+  'speechSynthesis' in
+    window
 ) {
-  const loadVoices = () => {
-    try {
-      cachedVoices =
-        window.speechSynthesis.getVoices();
-    } catch {
-      // ignore
-    }
-  };
+  const loadVoices =
+    () => {
+      try {
+        cachedVoices =
+          window.speechSynthesis
+            .getVoices();
+      } catch {
+        // ignore
+      }
+    };
 
   loadVoices();
 
   if (
-    window.speechSynthesis.onvoiceschanged !==
+    window.speechSynthesis
+      .onvoiceschanged !==
     undefined
   ) {
-    window.speechSynthesis.onvoiceschanged =
+    window.speechSynthesis
+      .onvoiceschanged =
       loadVoices;
   }
 }
