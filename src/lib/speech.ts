@@ -1,4 +1,16 @@
-export type SupportedAccent = 'en-US' | 'en-GB' | 'en-AU' | 'ar-IQ' | 'ar-LB';
+export type SupportedAccent =
+  | 'en-US'
+  | 'en-GB'
+  | 'en-AU'
+  | 'ar-IQ'
+  | 'ar-LB';
+
+export type TtsProvider =
+  | 'auto'
+  | 'native'
+  | 'google'
+  | 'azure'
+  | 'elevenlabs';
 
 export interface AccentConfig {
   code: SupportedAccent;
@@ -8,48 +20,549 @@ export interface AccentConfig {
 }
 
 export const ACCENT_CONFIGS: AccentConfig[] = [
-  { code: 'en-US', labelFa: 'آمریکایی (US)', labelEn: 'American Accent', flag: '🇺🇸' },
-  { code: 'en-GB', labelFa: 'بریتانیایی (UK)', labelEn: 'British Accent', flag: '🇬🇧' },
-  { code: 'en-AU', labelFa: 'استرالیایی (AU)', labelEn: 'Australian Accent', flag: '🇦🇺' },
-  { code: 'ar-IQ', labelFa: 'عراقی (Iraqi)', labelEn: 'Iraqi Dialect', flag: '🇮🇶' },
-  { code: 'ar-LB', labelFa: 'لبنانی (Lebanese)', labelEn: 'Lebanese Dialect', flag: '🇱🇧' },
+  {
+    code: 'en-US',
+    labelFa: 'آمریکایی (US)',
+    labelEn: 'American Accent',
+    flag: '🇺🇸',
+  },
+  {
+    code: 'en-GB',
+    labelFa: 'بریتانیایی (UK)',
+    labelEn: 'British Accent',
+    flag: '🇬🇧',
+  },
+  {
+    code: 'en-AU',
+    labelFa: 'استرالیایی (AU)',
+    labelEn: 'Australian Accent',
+    flag: '🇦🇺',
+  },
+  {
+    code: 'ar-IQ',
+    labelFa: 'عراقی (Iraqi)',
+    labelEn: 'Iraqi Dialect',
+    flag: '🇮🇶',
+  },
+  {
+    code: 'ar-LB',
+    labelFa: 'لبنانی (Lebanese)',
+    labelEn: 'Lebanese Dialect',
+    flag: '🇱🇧',
+  },
 ];
 
-let activeAudioFallback: HTMLAudioElement | null = null;
+let activeAudio: HTMLAudioElement | null = null;
+let activeObjectUrl: string | null = null;
 
-// Pre-load voices on browser startup
 let cachedVoices: SpeechSynthesisVoice[] = [];
 
-if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-  const loadVoices = () => {
+const STORAGE_KEY = 'linguaai-tts-provider';
+const DEFAULT_PROVIDER: TtsProvider = 'auto';
+
+function getNativeBridge(): any {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return (window as any).AndroidTTS || null;
+  } catch {
+    return null;
+  }
+}
+
+function getApiBaseUrl(): string {
+  try {
+    const configured =
+      typeof import.meta !== 'undefined'
+        ? (import.meta as any).env?.VITE_API_BASE_URL
+        : '';
+
+    if (configured && typeof configured === 'string') {
+      return configured.replace(/\/+$/, '');
+    }
+  } catch {
+    // ignore
+  }
+
+  return '';
+}
+
+export function getTtsProvider(): TtsProvider {
+  if (typeof window === 'undefined') {
+    return DEFAULT_PROVIDER;
+  }
+
+  try {
+    const value = window.localStorage.getItem(STORAGE_KEY);
+
+    if (
+      value === 'auto' ||
+      value === 'native' ||
+      value === 'google' ||
+      value === 'azure' ||
+      value === 'elevenlabs'
+    ) {
+      return value;
+    }
+  } catch {
+    // ignore
+  }
+
+  return DEFAULT_PROVIDER;
+}
+
+export function setTtsProvider(provider: TtsProvider): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(STORAGE_KEY, provider);
+  } catch {
+    // ignore
+  }
+}
+
+export function getTtsProviderLabel(provider: TtsProvider): string {
+  switch (provider) {
+    case 'native':
+      return 'Android Native';
+    case 'google':
+      return 'Google Cloud';
+    case 'azure':
+      return 'Microsoft Azure';
+    case 'elevenlabs':
+      return 'ElevenLabs';
+    case 'auto':
+    default:
+      return 'خودکار (Auto)';
+  }
+}
+
+function cleanupAudio(): void {
+  if (activeAudio) {
     try {
-      cachedVoices = window.speechSynthesis.getVoices();
-    } catch (e) {
+      activeAudio.pause();
+      activeAudio.src = '';
+    } catch {
       // ignore
     }
-  };
-  loadVoices();
-  if (window.speechSynthesis.onvoiceschanged !== undefined) {
-    window.speechSynthesis.onvoiceschanged = loadVoices;
+    activeAudio = null;
+  }
+
+  if (activeObjectUrl) {
+    try {
+      URL.revokeObjectURL(activeObjectUrl);
+    } catch {
+      // ignore
+    }
+    activeObjectUrl = null;
   }
 }
 
 export function stopSpeech(): void {
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  const native = getNativeBridge();
+
+  if (native && typeof native.stop === 'function') {
+    try {
+      native.stop();
+    } catch {
+      // ignore
+    }
+  }
+
+  if (
+    typeof window !== 'undefined' &&
+    'speechSynthesis' in window
+  ) {
     try {
       window.speechSynthesis.cancel();
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
-  if (activeAudioFallback) {
+
+  cleanupAudio();
+}
+
+function normalizeLanguage(accent: SupportedAccent): string {
+  if (accent === 'ar-IQ' || accent === 'ar-LB') {
+    return 'ar';
+  }
+
+  return accent;
+}
+
+function getNativeLanguage(accent: SupportedAccent): string {
+  switch (accent) {
+    case 'en-GB':
+      return 'en-GB';
+    case 'en-AU':
+      return 'en-AU';
+    case 'ar-IQ':
+      return 'ar-IQ';
+    case 'ar-LB':
+      return 'ar-LB';
+    case 'en-US':
+    default:
+      return 'en-US';
+  }
+}
+
+function nativeSpeak(
+  text: string,
+  rate: number,
+  accent: SupportedAccent,
+  pitch: number
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const native = getNativeBridge();
+
+    if (!native || typeof native.speak !== 'function') {
+      reject(new Error('native-tts-unavailable'));
+      return;
+    }
+
+    const requestId =
+      `tts-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    let finished = false;
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+
+      try {
+        delete (window as any).__linguaNativeTtsDone;
+      } catch {
+        // ignore
+      }
+
+      resolve();
+    };
+
+    const fail = () => {
+      if (finished) return;
+      finished = true;
+
+      try {
+        delete (window as any).__linguaNativeTtsDone;
+      } catch {
+        // ignore
+      }
+
+      reject(new Error('native-tts-error'));
+    };
+
+    if (typeof window !== 'undefined') {
+      (window as any).__linguaNativeTtsDone = (id: string) => {
+        if (id === requestId) {
+          finish();
+        }
+      };
+    }
+
     try {
-      activeAudioFallback.pause();
-      activeAudioFallback = null;
-    } catch (e) {
+      native.speak(
+        text,
+        getNativeLanguage(accent),
+        Math.min(Math.max(rate, 0.1), 2.0),
+        Math.min(Math.max(pitch, 0.1), 2.0),
+        requestId
+      );
+    } catch (error) {
+      fail();
+      return;
+    }
+
+    setTimeout(() => {
+      if (!finished) {
+        fail();
+      }
+    }, Math.max(15000, text.length * 500));
+  });
+}
+
+async function serverSpeak(
+  provider: Exclude<TtsProvider, 'auto' | 'native'>,
+  text: string,
+  rate: number,
+  accent: SupportedAccent,
+  pitch: number
+): Promise<void> {
+  const baseUrl = getApiBaseUrl();
+
+  const endpoint = `${baseUrl}/api/tts`;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      provider,
+      text,
+      lang: accent,
+      rate,
+      pitch,
+    }),
+  });
+
+  if (!response.ok) {
+    let message = `tts-http-${response.status}`;
+
+    try {
+      const data = await response.json();
+      if (data?.error) {
+        message = data.error;
+      }
+    } catch {
       // ignore
     }
+
+    throw new Error(message);
   }
+
+  const contentType =
+    response.headers.get('content-type') || '';
+
+  if (!contentType.includes('audio')) {
+    throw new Error('tts-invalid-audio-response');
+  }
+
+  const blob = await response.blob();
+
+  if (!blob.size) {
+    throw new Error('tts-empty-audio');
+  }
+
+  cleanupAudio();
+
+  const objectUrl = URL.createObjectURL(blob);
+  activeObjectUrl = objectUrl;
+
+  const audio = new Audio(objectUrl);
+  activeAudio = audio;
+
+  audio.playbackRate = Math.min(
+    Math.max(rate, 0.5),
+    2.0
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    let done = false;
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+
+      cleanupAudio();
+      resolve();
+    };
+
+    const fail = () => {
+      if (done) return;
+      done = true;
+
+      cleanupAudio();
+      reject(new Error('tts-audio-playback-failed'));
+    };
+
+    audio.onended = finish;
+    audio.onerror = fail;
+
+    audio
+      .play()
+      .then(() => {
+        // playback started
+      })
+      .catch(fail);
+  });
+}
+
+function webSpeechSpeak(
+  text: string,
+  rate: number,
+  accent: SupportedAccent,
+  pitch: number,
+  gender: 'male' | 'female'
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (
+      typeof window === 'undefined' ||
+      !('speechSynthesis' in window)
+    ) {
+      reject(new Error('web-speech-unavailable'));
+      return;
+    }
+
+    try {
+      const langCode = normalizeLanguage(accent);
+
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      utterance.lang = langCode;
+      utterance.rate = Math.min(
+        Math.max(rate, 0.6),
+        1.4
+      );
+
+      utterance.pitch =
+        gender === 'male'
+          ? Math.max(
+              0.7,
+              Math.min(pitch * 0.85, 0.95)
+            )
+          : Math.min(
+              1.3,
+              Math.max(pitch * 1.05, 1.0)
+            );
+
+      const voices =
+        cachedVoices.length > 0
+          ? cachedVoices
+          : window.speechSynthesis.getVoices();
+
+      const prefix = langCode.slice(0, 2).toLowerCase();
+
+      const matchingVoices = voices.filter(
+        (voice) =>
+          voice.lang === langCode ||
+          voice.lang.replace('_', '-') === langCode ||
+          voice.lang
+            .toLowerCase()
+            .startsWith(prefix)
+      );
+
+      if (matchingVoices.length > 0) {
+        utterance.voice = matchingVoices[0];
+      }
+
+      let finished = false;
+
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        resolve();
+      };
+
+      const fail = () => {
+        if (finished) return;
+        finished = true;
+        reject(new Error('web-speech-error'));
+      };
+
+      utterance.onend = finish;
+      utterance.onerror = fail;
+
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+
+      setTimeout(() => {
+        if (!finished) {
+          finish();
+        }
+      }, Math.max(5000, text.length * 250));
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+async function speakWithProvider(
+  provider: TtsProvider,
+  text: string,
+  rate: number,
+  accent: SupportedAccent,
+  pitch: number,
+  gender: 'male' | 'female'
+): Promise<void> {
+  if (provider === 'native') {
+    await nativeSpeak(
+      text,
+      rate,
+      accent,
+      pitch
+    );
+    return;
+  }
+
+  if (
+    provider === 'google' ||
+    provider === 'azure' ||
+    provider === 'elevenlabs'
+  ) {
+    await serverSpeak(
+      provider,
+      text,
+      rate,
+      accent,
+      pitch
+    );
+    return;
+  }
+
+  if (provider === 'auto') {
+    let onlineProvider: TtsProvider = 'google';
+
+    try {
+      if (typeof window !== 'undefined') {
+        const savedOnlineProvider =
+          window.localStorage.getItem(
+            'linguaai-online-tts-provider'
+          );
+
+        if (
+          savedOnlineProvider === 'google' ||
+          savedOnlineProvider === 'azure' ||
+          savedOnlineProvider === 'elevenlabs'
+        ) {
+          onlineProvider = savedOnlineProvider;
+        }
+      }
+    } catch {
+      // keep Google
+    }
+
+    try {
+      await serverSpeak(
+        onlineProvider,
+        text,
+        rate,
+        accent,
+        pitch
+      );
+      return;
+    } catch {
+      // Continue to Native.
+    }
+
+    try {
+      await nativeSpeak(
+        text,
+        rate,
+        accent,
+        pitch
+      );
+      return;
+    } catch {
+      // Continue to browser speech.
+    }
+
+    await webSpeechSpeak(
+      text,
+      rate,
+      accent,
+      pitch,
+      gender
+    );
+
+    return;
+  }
+
+  throw new Error('unsupported-tts-provider');
 }
 
 export function speakEnglishText(
@@ -59,134 +572,87 @@ export function speakEnglishText(
   pitch: number = 1.0,
   gender: 'male' | 'female' = 'female'
 ): Promise<void> {
-  return new Promise((resolve) => {
-    if (!text || !text.trim()) {
+  return new Promise(async (resolve, reject) => {
+    const cleanText = text?.trim();
+
+    if (!cleanText) {
       resolve();
       return;
     }
 
     stopSpeech();
 
-    const cleanText = text.trim();
-    let langCode: string = accent;
-    if (accent === 'ar-IQ' || accent === 'ar-LB') {
-      langCode = 'ar';
-    }
+    const provider = getTtsProvider();
 
-    const playAudioToneFallback = () => {
-      try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-          gain.gain.setValueAtTime(0.15, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.3);
-        }
-      } catch (e) {
-        // ignore
-      }
-      resolve();
-    };
-
-    // Method 2: Client Web Speech API (SpeechSynthesis) for Offline Mode
-    const playWebSpeechFallback = () => {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        try {
-          if (window.speechSynthesis.paused) {
-            window.speechSynthesis.resume();
-          }
-
-          const utterance = new SpeechSynthesisUtterance(cleanText);
-          utterance.lang = langCode;
-          utterance.rate = Math.min(Math.max(rate, 0.6), 1.4);
-
-          if (gender === 'male') {
-            utterance.pitch = Math.max(0.7, Math.min(pitch * 0.85, 0.95));
-          } else {
-            utterance.pitch = Math.min(1.3, Math.max(pitch * 1.05, 1.0));
-          }
-
-          const voices = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
-          const prefix = langCode.slice(0, 2);
-
-          const matchingLangVoices = voices.filter(
-            (v) =>
-              v.lang === langCode ||
-              v.lang.replace('_', '-') === langCode ||
-              v.lang.toLowerCase().startsWith(prefix.toLowerCase())
-          );
-
-          if (matchingLangVoices.length > 0) {
-            utterance.voice = matchingLangVoices[0];
-          }
-
-          let done = false;
-          utterance.onend = () => {
-            if (!done) {
-              done = true;
-              resolve();
-            }
-          };
-
-          utterance.onerror = () => {
-            if (!done) {
-              done = true;
-              playAudioToneFallback();
-            }
-          };
-
-          window.speechSynthesis.speak(utterance);
-
-          // Safety timeout for web speech synthesis
-          setTimeout(() => {
-            if (!done) {
-              done = true;
-              resolve();
-            }
-          }, Math.max(3000, cleanText.length * 200));
-
-          return;
-        } catch (e) {
-          playAudioToneFallback();
-          return;
-        }
-      }
-      playAudioToneFallback();
-    };
-
-    // Method 1: High-Quality Server-Side Audio Stream (/api/tts)
     try {
-      const audioUrl = `/api/tts?text=${encodeURIComponent(cleanText)}&lang=${encodeURIComponent(langCode)}`;
-      const audio = new Audio(audioUrl);
-      audio.playbackRate = Math.min(Math.max(rate, 0.75), 1.25);
-      activeAudioFallback = audio;
+      await speakWithProvider(
+        provider,
+        cleanText,
+        rate,
+        accent,
+        pitch,
+        gender
+      );
 
-      audio.onended = () => {
-        activeAudioFallback = null;
-        resolve();
-      };
+      resolve();
+    } catch (error) {
+      console.error(
+        '[LinguaAI TTS] Speech failed:',
+        error
+      );
 
-      audio.onerror = () => {
-        activeAudioFallback = null;
-        playWebSpeechFallback();
-      };
-
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          activeAudioFallback = null;
-          playWebSpeechFallback();
-        });
-      }
-    } catch (err) {
-      playWebSpeechFallback();
+      // Important:
+      // Never play a fake beep as a TTS fallback.
+      reject(error);
     }
   });
+}
+
+export function isNativeTtsAvailable(): boolean {
+  const native = getNativeBridge();
+
+  try {
+    return !!(
+      native &&
+      typeof native.isAvailable === 'function' &&
+      native.isAvailable()
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function getAvailableTtsProviders(): TtsProvider[] {
+  return [
+    'auto',
+    'native',
+    'google',
+    'azure',
+    'elevenlabs',
+  ];
+}
+
+// Pre-load browser voices.
+if (
+  typeof window !== 'undefined' &&
+  'speechSynthesis' in window
+) {
+  const loadVoices = () => {
+    try {
+      cachedVoices =
+        window.speechSynthesis.getVoices();
+    } catch {
+      // ignore
+    }
+  };
+
+  loadVoices();
+
+  if (
+    window.speechSynthesis.onvoiceschanged !==
+    undefined
+  ) {
+    window.speechSynthesis.onvoiceschanged =
+      loadVoices;
+  }
 }
