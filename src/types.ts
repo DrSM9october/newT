@@ -1,7 +1,23 @@
-export type DialectType = 'en-US' | 'en-GB' | 'en-AU' | 'ar-IQ' | 'ar-LB';
+export type DialectType =
+  | 'fa'
+  | 'fa-IR'
+  | 'en-US'
+  | 'en-GB'
+  | 'en-AU'
+  | 'ar-IQ'
+  | 'ar-LB';
+
 export type GenderType = 'masculine' | 'feminine';
+
 export type DifficultyLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
-export type PersonaMood = 'friendly' | 'formal' | 'excited' | 'patient' | 'witty' | 'empathetic';
+
+export type PersonaMood =
+  | 'friendly'
+  | 'formal'
+  | 'excited'
+  | 'patient'
+  | 'witty'
+  | 'empathetic';
 
 export interface Persona {
   id: string;
@@ -47,7 +63,11 @@ export interface DictionaryWord {
   partOfSpeech: string;
   level: DifficultyLevel;
   dialect?: DialectType;
-  examples: { en: string; fa: string; gender?: 'masculine' | 'feminine' | 'unisex' }[];
+  examples: {
+    en: string;
+    fa: string;
+    gender?: 'masculine' | 'feminine' | 'unisex';
+  }[];
   collocations?: string[];
   synonyms?: string[];
   antonyms?: string[];
@@ -66,7 +86,20 @@ export interface RoleplayScenario {
   titleFa: string;
   titleEn: string;
   descriptionFa: string;
-  category: 'restaurant_cafe' | 'travel_airport' | 'shopping_market' | 'job_interview' | 'social_chat' | 'directions_transport' | 'hotel_stay' | 'emergency_doctor' | 'business_negotiation' | 'shopping' | 'health_medical' | 'technology' | 'daily_life';
+  category:
+    | 'restaurant_cafe'
+    | 'travel_airport'
+    | 'shopping_market'
+    | 'job_interview'
+    | 'social_chat'
+    | 'directions_transport'
+    | 'hotel_stay'
+    | 'emergency_doctor'
+    | 'business_negotiation'
+    | 'shopping'
+    | 'health_medical'
+    | 'technology'
+    | 'daily_life';
   level: DifficultyLevel;
   dialect?: DialectType;
   icon: string;
@@ -80,13 +113,21 @@ export interface RoleplayScenario {
   };
   objectives: PracticalScenarioObjective[];
   starterMessage: string;
-  usefulPhrases: { en: string; fa: string; gender?: 'masculine' | 'feminine' | 'unisex' }[];
+  usefulPhrases: {
+    en: string;
+    fa: string;
+    gender?: 'masculine' | 'feminine' | 'unisex';
+  }[];
   keyVocab: string[];
 }
 
 export interface PracticeExercise {
   id: string;
-  type: 'multiple_choice' | 'fill_blank' | 'listening' | 'sentence_arrange';
+  type:
+    | 'multiple_choice'
+    | 'fill_blank'
+    | 'listening'
+    | 'sentence_arrange';
   questionFa: string;
   sentenceEn?: string;
   options?: string[];
