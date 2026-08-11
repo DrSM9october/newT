@@ -42,12 +42,6 @@ export const ACCENT_CONFIGS: AccentConfig[] = [
     flag: '🇬🇧',
   },
   {
-    code: 'en-AU',
-    labelFa: 'استرالیایی (AU)',
-    labelEn: 'Australian Accent',
-    flag: '🇦🇺',
-  },
-  {
     code: 'ar-IQ',
     labelFa: 'عراقی (Iraqi)',
     labelEn: 'Iraqi Dialect',
