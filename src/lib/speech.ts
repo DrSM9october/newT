@@ -3,12 +3,12 @@ export type SupportedAccent =
   | 'fa-IR'
   | 'en-US'
   | 'en-GB'
-  | 'en-AU'
   | 'ar-IQ'
   | 'ar-LB';
 
 export type TtsProvider =
   | 'auto'
+  | 'open-source'
   | 'native'
   | 'web'
   | 'google'
