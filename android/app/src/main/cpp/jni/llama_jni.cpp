@@ -4,8 +4,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
+#include <cstdint>
 #include <exception>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -24,20 +25,35 @@
 
 namespace {
 
+// ============================================================
+// Native model handle
+// ============================================================
+
 struct NativeModel {
     llama_model * model = nullptr;
     llama_context * ctx = nullptr;
 };
 
+// Global synchronization.
+// llama_context is not intended to be used concurrently.
 std::mutex g_mutex;
+
 bool g_engine_initialized = false;
 
-std::string jstring_to_utf8(JNIEnv *env, jstring value) {
+// ============================================================
+// Java String -> UTF-8 std::string
+// ============================================================
+
+std::string jstring_to_utf8(
+        JNIEnv *env,
+        jstring value) {
+
     if (!value) {
         return {};
     }
 
-    const char * chars = env->GetStringUTFChars(value, nullptr);
+    const char *chars =
+        env->GetStringUTFChars(value, nullptr);
 
     if (!chars) {
         return {};
@@ -45,25 +61,43 @@ std::string jstring_to_utf8(JNIEnv *env, jstring value) {
 
     std::string result(chars);
 
-    env->ReleaseStringUTFChars(value, chars);
+    env->ReleaseStringUTFChars(
+        value,
+        chars
+    );
 
     return result;
 }
 
-jstring make_result(JNIEnv *env, const std::string &text) {
-    return env->NewStringUTF(text.c_str());
+// ============================================================
+// std::string -> Java String
+// ============================================================
+
+jstring make_result(
+        JNIEnv *env,
+        const std::string &text) {
+
+    return env->NewStringUTF(
+        text.c_str()
+    );
 }
 
+// ============================================================
+// Android CPU thread count
+// ============================================================
+
 int get_thread_count() {
-    unsigned int hw = std::thread::hardware_concurrency();
+
+    unsigned int hw =
+        std::thread::hardware_concurrency();
 
     if (hw == 0) {
         return 4;
     }
 
     /*
-     * روی موبایل تمام هسته‌ها را درگیر نکنیم.
-     * مقدار 4 برای شروع محافظه‌کارانه است.
+     * برای موبایل فعلاً حداکثر 4 thread.
+     * بعداً می‌توانیم adaptive tuning انجام دهیم.
      */
     return static_cast<int>(
         std::max(
@@ -73,60 +107,151 @@ int get_thread_count() {
     );
 }
 
+// ============================================================
+// Tokenize prompt
+// ============================================================
+
 bool tokenize_prompt(
         llama_model *model,
         const std::string &prompt,
         std::vector<llama_token> &tokens) {
 
     if (!model) {
+        LOGE("tokenize_prompt: model is null");
         return false;
     }
 
     if (prompt.empty()) {
+        LOGE("tokenize_prompt: prompt is empty");
+        return false;
+    }
+
+    if (prompt.size() >
+        static_cast<size_t>(
+            std::numeric_limits<int32_t>::max()
+        )) {
+
+        LOGE("Prompt is too large");
         return false;
     }
 
     const int32_t text_len =
-        static_cast<int32_t>(prompt.size());
+        static_cast<int32_t>(
+            prompt.size()
+        );
 
     /*
+     * --------------------------------------------------------
      * مرحله اول:
-     * تعداد واقعی توکن‌ها را از llama.cpp می‌گیریم.
+     *
+     * طبق API llama.cpp:
+     * اگر buffer کافی نباشد، llama_tokenize مقدار منفی
+     * برمی‌گرداند و قدر مطلق آن تعداد توکن مورد نیاز است.
+     * --------------------------------------------------------
      */
-    int32_t required = llama_tokenize(
-        model,
-        prompt.c_str(),
-        text_len,
-        nullptr,
-        0,
-        true,
-        true
-    );
 
-    if (required <= 0) {
-        LOGE("llama_tokenize returned %d", required);
+    int32_t required =
+        llama_tokenize(
+            model,
+            prompt.c_str(),
+            text_len,
+            nullptr,
+            0,
+            true,
+            true
+        );
+
+    if (required == 0) {
+        LOGE("llama_tokenize returned 0");
         return false;
     }
 
-    tokens.resize(static_cast<size_t>(required));
+    if (required < 0) {
+        required = -required;
+    }
+
+    if (required <= 0) {
+        LOGE(
+            "Invalid required token count: %d",
+            required
+        );
+        return false;
+    }
 
     /*
-     * مرحله دوم:
-     * tokenization واقعی
+     * جلوگیری از allocation غیرمنطقی.
      */
-    int32_t n_tokens = llama_tokenize(
-        model,
-        prompt.c_str(),
-        text_len,
-        tokens.data(),
-        required,
-        true,
-        true
+    constexpr int32_t MAX_PROMPT_TOKENS = 32768;
+
+    if (required > MAX_PROMPT_TOKENS) {
+        LOGE(
+            "Prompt requires too many tokens: %d",
+            required
+        );
+        return false;
+    }
+
+    tokens.resize(
+        static_cast<size_t>(required)
     );
 
-    if (n_tokens <= 0) {
+    /*
+     * --------------------------------------------------------
+     * مرحله دوم:
+     * Tokenization واقعی
+     * --------------------------------------------------------
+     */
+
+    int32_t n_tokens =
+        llama_tokenize(
+            model,
+            prompt.c_str(),
+            text_len,
+            tokens.data(),
+            required,
+            true,
+            true
+        );
+
+    if (n_tokens < 0) {
+        /*
+         * در حالت عادی نباید اینجا رخ دهد چون buffer
+         * بر اساس مرحله اول به اندازه کافی بزرگ است.
+         */
+        int32_t needed = -n_tokens;
+
         LOGE(
-            "llama_tokenize failed, result=%d",
+            "llama_tokenize buffer still too small: %d",
+            needed
+        );
+
+        if (needed <= 0 ||
+            needed > MAX_PROMPT_TOKENS) {
+
+            tokens.clear();
+            return false;
+        }
+
+        tokens.resize(
+            static_cast<size_t>(needed)
+        );
+
+        n_tokens =
+            llama_tokenize(
+                model,
+                prompt.c_str(),
+                text_len,
+                tokens.data(),
+                needed,
+                true,
+                true
+            );
+    }
+
+    if (n_tokens <= 0) {
+
+        LOGE(
+            "llama_tokenize failed: %d",
             n_tokens
         );
 
@@ -134,7 +259,9 @@ bool tokenize_prompt(
         return false;
     }
 
-    tokens.resize(static_cast<size_t>(n_tokens));
+    tokens.resize(
+        static_cast<size_t>(n_tokens)
+    );
 
     LOGD(
         "Prompt tokenized: %d tokens",
@@ -144,10 +271,13 @@ bool tokenize_prompt(
     return true;
 }
 
+// ============================================================
+// Sampling
+// ============================================================
+
 llama_token sample_next_token(
         llama_context *ctx,
         llama_model *model,
-        const std::vector<llama_token> &history,
         float temperature,
         float top_p) {
 
@@ -158,11 +288,22 @@ llama_token sample_next_token(
     const int32_t n_vocab =
         llama_n_vocab(model);
 
-    float *logits =
-        llama_get_logits(ctx);
+    if (n_vocab <= 0) {
+        LOGE("Invalid vocabulary size");
+        return -1;
+    }
 
-    if (!logits || n_vocab <= 0) {
-        LOGE("Invalid logits");
+    /*
+     * فقط آخرین logits را می‌گیریم.
+     */
+    float *logits =
+        llama_get_logits_ith(
+            ctx,
+            -1
+        );
+
+    if (!logits) {
+        LOGE("llama_get_logits_ith returned null");
         return -1;
     }
 
@@ -190,15 +331,26 @@ llama_token sample_next_token(
     };
 
     /*
+     * --------------------------------------------------------
      * Temperature
+     * --------------------------------------------------------
      */
-    float temp = temperature;
 
-    if (!std::isfinite(temp) || temp <= 0.0f) {
+    float temp =
+        static_cast<float>(temperature);
+
+    if (!std::isfinite(temp) ||
+        temp <= 0.0f) {
+
         temp = 0.7f;
     }
 
-    temp = std::clamp(temp, 0.05f, 2.0f);
+    temp =
+        std::clamp(
+            temp,
+            0.05f,
+            2.0f
+        );
 
     llama_sample_temp(
         ctx,
@@ -207,15 +359,24 @@ llama_token sample_next_token(
     );
 
     /*
+     * --------------------------------------------------------
      * Top-P
+     * --------------------------------------------------------
      */
-    float p = top_p;
+
+    float p =
+        static_cast<float>(top_p);
 
     if (!std::isfinite(p)) {
         p = 0.9f;
     }
 
-    p = std::clamp(p, 0.05f, 1.0f);
+    p =
+        std::clamp(
+            p,
+            0.05f,
+            1.0f
+        );
 
     llama_sample_top_p(
         ctx,
@@ -233,16 +394,17 @@ llama_token sample_next_token(
     );
 
     /*
-     * انتخاب تصادفی بر اساس probability
+     * انتخاب تصادفی با RNG داخلی llama.cpp
      */
-    llama_token token =
-        llama_sample_token(
-            ctx,
-            &candidate_array
-        );
-
-    return token;
+    return llama_sample_token(
+        ctx,
+        &candidate_array
+    );
 }
+
+// ============================================================
+// Token -> text piece
+// ============================================================
 
 std::string token_to_piece(
         llama_model *model,
@@ -253,35 +415,56 @@ std::string token_to_piece(
     }
 
     /*
-     * ابتدا buffer کوچک.
+     * ابتدا buffer معمولی.
      */
     std::vector<char> buffer(256);
 
-    int32_t n = llama_token_to_piece(
-        model,
-        token,
-        buffer.data(),
-        static_cast<int32_t>(buffer.size()),
-        0,
-        false
-    );
-
-    /*
-     * در صورت کمبود فضا، اندازه بزرگ‌تر.
-     */
-    if (n < 0) {
-        buffer.resize(
-            static_cast<size_t>(-n) + 1
-        );
-
-        n = llama_token_to_piece(
+    int32_t n =
+        llama_token_to_piece(
             model,
             token,
             buffer.data(),
-            static_cast<int32_t>(buffer.size()),
+            static_cast<int32_t>(
+                buffer.size()
+            ),
             0,
             false
         );
+
+    /*
+     * اگر buffer کوچک بود، مقدار منفی یعنی
+     * تعداد مورد نیاز.
+     */
+    if (n < 0) {
+
+        int32_t required = -n;
+
+        if (required <= 0 ||
+            required > 1024 * 1024) {
+
+            LOGE(
+                "Invalid token piece size: %d",
+                required
+            );
+
+            return {};
+        }
+
+        buffer.resize(
+            static_cast<size_t>(required)
+        );
+
+        n =
+            llama_token_to_piece(
+                model,
+                token,
+                buffer.data(),
+                static_cast<int32_t>(
+                    buffer.size()
+                ),
+                0,
+                false
+            );
     }
 
     if (n <= 0) {
@@ -297,7 +480,7 @@ std::string token_to_piece(
 } // namespace
 
 // ============================================================
-// Engine initialization
+// 1. Engine initialization
 // ============================================================
 
 JNIEXPORT jboolean JNICALL
@@ -308,14 +491,22 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeInitEngine(
     (void) env;
     (void) thiz;
 
-    std::lock_guard<std::mutex> lock(g_mutex);
+    std::lock_guard<std::mutex> lock(
+        g_mutex
+    );
 
     if (g_engine_initialized) {
-        LOGD("Llama engine already initialized");
+
+        LOGD(
+            "Llama engine already initialized"
+        );
+
         return JNI_TRUE;
     }
 
-    LOGD("Initializing llama.cpp backend...");
+    LOGD(
+        "Initializing llama.cpp backend..."
+    );
 
     try {
 
@@ -323,7 +514,9 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeInitEngine(
 
         g_engine_initialized = true;
 
-        LOGD("Llama engine initialized successfully");
+        LOGD(
+            "Llama engine initialized successfully"
+        );
 
         return JNI_TRUE;
 
@@ -341,7 +534,7 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeInitEngine(
 }
 
 // ============================================================
-// Load model
+// 2. Load GGUF model
 // ============================================================
 
 JNIEXPORT jlong JNICALL
@@ -352,21 +545,40 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeLoadModel(
 
     (void) thiz;
 
+    std::lock_guard<std::mutex> lock(
+        g_mutex
+    );
+
     if (!g_engine_initialized) {
-        LOGE("Engine is not initialized");
+
+        LOGE(
+            "Engine is not initialized"
+        );
+
         return 0;
     }
 
     if (!modelPath) {
-        LOGE("modelPath is null");
+
+        LOGE(
+            "modelPath is null"
+        );
+
         return 0;
     }
 
     std::string path =
-        jstring_to_utf8(env, modelPath);
+        jstring_to_utf8(
+            env,
+            modelPath
+        );
 
     if (path.empty()) {
-        LOGE("Model path is empty");
+
+        LOGE(
+            "Model path is empty"
+        );
+
         return 0;
     }
 
@@ -377,11 +589,15 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeLoadModel(
 
     try {
 
+        // ----------------------------------------------------
+        // Model parameters
+        // ----------------------------------------------------
+
         llama_model_params model_params =
             llama_model_default_params();
 
         /*
-         * Android CPU-only build.
+         * فعلاً CPU-only.
          */
         model_params.n_gpu_layers = 0;
 
@@ -392,29 +608,52 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeLoadModel(
             );
 
         if (!model) {
-            LOGE("llama_load_model_from_file failed");
+
+            LOGE(
+                "llama_load_model_from_file failed"
+            );
+
             return 0;
         }
 
-        LOGD("Model loaded successfully");
+        LOGD(
+            "Model loaded successfully"
+        );
+
+        // ----------------------------------------------------
+        // Context parameters
+        // ----------------------------------------------------
 
         llama_context_params ctx_params =
             llama_context_default_params();
 
         /*
-         * حافظه محافظه‌کارانه برای موبایل.
+         * مقدار محافظه‌کارانه برای Android.
          */
         ctx_params.n_ctx = 2048;
         ctx_params.n_batch = 512;
         ctx_params.n_ubatch = 512;
 
-        int threads = get_thread_count();
+        int threads =
+            get_thread_count();
 
         ctx_params.n_threads =
-            static_cast<uint32_t>(threads);
+            static_cast<uint32_t>(
+                threads
+            );
 
         ctx_params.n_threads_batch =
-            static_cast<uint32_t>(threads);
+            static_cast<uint32_t>(
+                threads
+            );
+
+        LOGD(
+            "Creating context: n_ctx=%u n_batch=%u n_ubatch=%u threads=%d",
+            ctx_params.n_ctx,
+            ctx_params.n_batch,
+            ctx_params.n_ubatch,
+            threads
+        );
 
         llama_context *ctx =
             llama_new_context_with_model(
@@ -434,7 +673,9 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeLoadModel(
         }
 
         /*
-         * Seed ثابت نیست؛ llama.cpp از RNG خودش استفاده می‌کند.
+         * Seed پیش‌فرض llama.cpp.
+         * LLAMA_DEFAULT_SEED = 0xFFFFFFFF
+         * یعنی seed تصادفی.
          */
         llama_set_rng_seed(
             ctx,
@@ -454,7 +695,9 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeLoadModel(
             handle
         );
 
-        return reinterpret_cast<jlong>(handle);
+        return reinterpret_cast<jlong>(
+            handle
+        );
 
     } catch (const std::exception &e) {
 
@@ -468,7 +711,7 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeLoadModel(
 }
 
 // ============================================================
-// Inference
+// 3. Run inference
 // ============================================================
 
 JNIEXPORT jstring JNICALL
@@ -484,6 +727,7 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
     (void) thiz;
 
     if (!modelPtr) {
+
         return make_result(
             env,
             "Error: invalid model handle"
@@ -491,14 +735,32 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
     }
 
     if (!prompt) {
+
         return make_result(
             env,
             "Error: prompt is null"
         );
     }
 
+    /*
+     * context فقط توسط یک inference در هر لحظه استفاده شود.
+     */
+    std::lock_guard<std::mutex> lock(
+        g_mutex
+    );
+
+    if (!g_engine_initialized) {
+
+        return make_result(
+            env,
+            "Error: engine is not initialized"
+        );
+    }
+
     NativeModel *handle =
-        reinterpret_cast<NativeModel *>(modelPtr);
+        reinterpret_cast<NativeModel *>(
+            modelPtr
+        );
 
     if (!handle ||
         !handle->model ||
@@ -511,9 +773,13 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
     }
 
     std::string promptText =
-        jstring_to_utf8(env, prompt);
+        jstring_to_utf8(
+            env,
+            prompt
+        );
 
     if (promptText.empty()) {
+
         return make_result(
             env,
             "Error: empty prompt"
@@ -521,14 +787,22 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
     }
 
     int max_new_tokens =
-        static_cast<int>(maxTokens);
+        static_cast<int>(
+            maxTokens
+        );
 
     if (max_new_tokens <= 0) {
         max_new_tokens = 128;
     }
 
+    /*
+     * حداکثر فعلی.
+     */
     max_new_tokens =
-        std::min(max_new_tokens, 2048);
+        std::min(
+            max_new_tokens,
+            2048
+        );
 
     LOGD(
         "Inference started. max_tokens=%d temp=%f top_p=%f",
@@ -539,11 +813,28 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
 
     try {
 
+        // ----------------------------------------------------
+        // 0. پاک کردن KV cache
+        // ----------------------------------------------------
+
         /*
-         * ----------------------------------------------------
-         * 1. Tokenize
-         * ----------------------------------------------------
+         * هر درخواست باید مستقل باشد.
+         *
+         * بدون این خط، KV cache درخواست قبلی ممکن است
+         * روی inference بعدی اثر بگذارد.
          */
+        llama_kv_cache_clear(
+            handle->ctx
+        );
+
+        LOGD(
+            "KV cache cleared"
+        );
+
+        // ----------------------------------------------------
+        // 1. Tokenize
+        // ----------------------------------------------------
+
         std::vector<llama_token> prompt_tokens;
 
         if (!tokenize_prompt(
@@ -562,10 +853,68 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
                 prompt_tokens.size()
             );
 
+        // ----------------------------------------------------
+        // 2. Context capacity check
+        // ----------------------------------------------------
+
+        const uint32_t n_ctx =
+            llama_n_ctx(
+                handle->ctx
+            );
+
+        if (
+            static_cast<uint64_t>(
+                prompt_count
+            ) >=
+            static_cast<uint64_t>(
+                n_ctx
+            )
+        ) {
+
+            LOGE(
+                "Prompt too long: %d tokens, context=%u",
+                prompt_count,
+                n_ctx
+            );
+
+            return make_result(
+                env,
+                "Error: prompt exceeds context size"
+            );
+        }
+
         /*
-         * ----------------------------------------------------
-         * 2. Decode prompt فقط یک بار
-         * ----------------------------------------------------
+         * حداکثر تعداد توکن‌هایی که واقعاً می‌توانیم
+         * تولید کنیم.
+         */
+        int allowed_new_tokens =
+            static_cast<int>(
+                n_ctx -
+                static_cast<uint32_t>(
+                    prompt_count
+                )
+            );
+
+        allowed_new_tokens =
+            std::min(
+                allowed_new_tokens,
+                max_new_tokens
+            );
+
+        if (allowed_new_tokens <= 0) {
+
+            return make_result(
+                env,
+                "Error: no context space for generation"
+            );
+        }
+
+        // ----------------------------------------------------
+        // 3. Decode prompt
+        // ----------------------------------------------------
+
+        /*
+         * prompt را فقط یک بار decode می‌کنیم.
          */
         llama_batch prompt_batch =
             llama_batch_get_one(
@@ -575,7 +924,7 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
                 0
             );
 
-        int decode_result =
+        int32_t decode_result =
             llama_decode(
                 handle->ctx,
                 prompt_batch
@@ -594,31 +943,48 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
             );
         }
 
-        /*
-         * ----------------------------------------------------
-         * 3. Generate
-         * ----------------------------------------------------
-         */
-        std::string response;
+        LOGD(
+            "Prompt decoded successfully: %d tokens",
+            prompt_count
+        );
 
-        std::vector<llama_token> history =
-            prompt_tokens;
+        // ----------------------------------------------------
+        // 4. Generate
+        // ----------------------------------------------------
+
+        std::string response;
 
         response.reserve(
             static_cast<size_t>(
-                max_new_tokens * 4
+                allowed_new_tokens * 4
             )
         );
 
-        for (int i = 0;
-             i < max_new_tokens;
-             ++i) {
+        /*
+         * فقط برای نگهداری tokenهای تولیدشده.
+         */
+        std::vector<llama_token> generated_tokens;
+
+        generated_tokens.reserve(
+            static_cast<size_t>(
+                allowed_new_tokens
+            )
+        );
+
+        for (
+            int i = 0;
+            i < allowed_new_tokens;
+            ++i
+        ) {
+
+            // ------------------------------------------------
+            // Sample next token
+            // ------------------------------------------------
 
             llama_token token =
                 sample_next_token(
                     handle->ctx,
                     handle->model,
-                    history,
                     temperature,
                     topP
                 );
@@ -626,29 +992,36 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
             if (token < 0) {
 
                 LOGE(
-                    "Sampling returned invalid token"
+                    "Sampling returned invalid token at step %d",
+                    i
                 );
 
                 break;
             }
 
-            /*
-             * پایان طبیعی تولید.
-             */
-            if (llama_token_is_eog(
+            // ------------------------------------------------
+            // End of generation
+            // ------------------------------------------------
+
+            if (
+                llama_token_is_eog(
                     handle->model,
-                    token)) {
+                    token
+                )
+            ) {
 
                 LOGD(
-                    "EOG token received"
+                    "EOG token received at step %d",
+                    i
                 );
 
                 break;
             }
 
-            /*
-             * تبدیل token به text.
-             */
+            // ------------------------------------------------
+            // Token -> text
+            // ------------------------------------------------
+
             std::string piece =
                 token_to_piece(
                     handle->model,
@@ -659,17 +1032,22 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
                 response += piece;
             }
 
-            history.push_back(token);
+            generated_tokens.push_back(
+                token
+            );
+
+            // ------------------------------------------------
+            // Decode generated token
+            // ------------------------------------------------
 
             /*
-             * ------------------------------------------------
-             * مهم:
-             * فقط token جدید را decode می‌کنیم.
-             * ------------------------------------------------
+             * موقعیت token جدید:
+             *
+             * prompt_count + i
              */
             llama_batch next_batch =
                 llama_batch_get_one(
-                    &history.back(),
+                    &generated_tokens.back(),
                     1,
                     prompt_count + i,
                     0
@@ -693,8 +1071,13 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
             }
         }
 
+        // ----------------------------------------------------
+        // 5. Result
+        // ----------------------------------------------------
+
         LOGD(
-            "Inference finished. chars=%zu",
+            "Inference finished. generated_tokens=%zu chars=%zu",
+            generated_tokens.size(),
             response.size()
         );
 
@@ -716,11 +1099,22 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
                 "Error: "
             ) + e.what()
         );
+
+    } catch (...) {
+
+        LOGE(
+            "Inference unknown exception"
+        );
+
+        return make_result(
+            env,
+            "Error: unknown native inference error"
+        );
     }
 }
 
 // ============================================================
-// Unload model
+// 4. Unload model
 // ============================================================
 
 JNIEXPORT void JNICALL
@@ -736,8 +1130,18 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeUnloadModel(
         return;
     }
 
+    std::lock_guard<std::mutex> lock(
+        g_mutex
+    );
+
     NativeModel *handle =
-        reinterpret_cast<NativeModel *>(modelPtr);
+        reinterpret_cast<NativeModel *>(
+            modelPtr
+        );
+
+    if (!handle) {
+        return;
+    }
 
     LOGD(
         "Unloading model handle: %p",
@@ -745,22 +1149,32 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeUnloadModel(
     );
 
     if (handle->ctx) {
-        llama_free(handle->ctx);
+
+        llama_free(
+            handle->ctx
+        );
+
         handle->ctx = nullptr;
     }
 
     if (handle->model) {
-        llama_free_model(handle->model);
+
+        llama_free_model(
+            handle->model
+        );
+
         handle->model = nullptr;
     }
 
     delete handle;
 
-    LOGD("Model unloaded");
+    LOGD(
+        "Model unloaded successfully"
+    );
 }
 
 // ============================================================
-// Free engine
+// 5. Free engine
 // ============================================================
 
 JNIEXPORT void JNICALL
@@ -771,17 +1185,29 @@ Java_com_linguaai_persian_plugins_LocalAIManager_nativeFreeEngine(
     (void) env;
     (void) thiz;
 
-    std::lock_guard<std::mutex> lock(g_mutex);
+    std::lock_guard<std::mutex> lock(
+        g_mutex
+    );
 
     if (!g_engine_initialized) {
         return;
     }
 
-    LOGD("Freeing llama.cpp backend...");
+    LOGD(
+        "Freeing llama.cpp backend..."
+    );
+
+    /*
+     * توجه:
+     * قبل از nativeFreeEngine باید Java لزوماً
+     * nativeUnloadModel را صدا زده باشد.
+     */
 
     llama_backend_free();
 
     g_engine_initialized = false;
 
-    LOGD("Llama backend freed");
+    LOGD(
+        "Llama backend freed"
+    );
 }
