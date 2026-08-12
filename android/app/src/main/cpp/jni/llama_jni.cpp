@@ -48,7 +48,6 @@ public class LocalAIManager {
 
     public LocalAIManager(Context context) {
         this.context = context.getApplicationContext();
-
         loadNativeLibrary();
     }
 
@@ -140,8 +139,7 @@ public class LocalAIManager {
 
         try {
 
-            engineReady =
-                    nativeInitEngine();
+            engineReady = nativeInitEngine();
 
             Log.d(
                     TAG,
@@ -218,8 +216,7 @@ public class LocalAIManager {
             }
         }
 
-        File modelFile =
-                new File(modelPath);
+        File modelFile = new File(modelPath);
 
         if (!modelFile.exists()) {
 
@@ -247,7 +244,6 @@ public class LocalAIManager {
          * اگر مدل دیگری load شده، ابتدا آزادش می‌کنیم.
          */
         if (nativeModelPtr != 0L) {
-
             unloadModel();
         }
 
@@ -259,10 +255,9 @@ public class LocalAIManager {
                             + modelPath
             );
 
-            long ptr =
-                    nativeLoadModel(
-                            modelPath
-                    );
+            long ptr = nativeLoadModel(
+                    modelPath
+            );
 
             if (ptr == 0L) {
 
@@ -311,7 +306,6 @@ public class LocalAIManager {
      * This method is required by LocalAIPlugin.java.
      */
     public synchronized String getLoadedModelId() {
-
         return loadedModelId;
     }
 
@@ -410,14 +404,13 @@ public class LocalAIManager {
 
         try {
 
-            String result =
-                    nativeRunInference(
-                            nativeModelPtr,
-                            prompt,
-                            maxTokens,
-                            temperature,
-                            topP
-                    );
+            String result = nativeRunInference(
+                    nativeModelPtr,
+                    prompt,
+                    maxTokens,
+                    temperature,
+                    topP
+            );
 
             if (result == null) {
 
