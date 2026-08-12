@@ -1,252 +1,74 @@
 #include <jni.h>
 
+#include <android/log.h>
+
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "llama.h"
 
+#define LOG_TAG "LinguaAI-llamaJNI"
+
+#define LOGI(...) \
+    __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+
+#define LOGE(...) \
+    __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
 namespace {
 
-std::mutex g_backend_mutex;
-bool g_backend_initialized = false;
+std::mutex g_engine_mutex;
 
-/**
- * Initialize the llama.cpp backend exactly once while it is active.
+bool g_engine_initialized = false;
+
+/*
+ * The Java layer owns the model pointer returned by
+ * nativeLoadModel().
  *
- * We intentionally do not use std::once_flag here because
- * llama_backend_free() can be called during shutdown and the
- * backend may need to be initialized again later.
+ * Native model/context are stored together so that the
+ * returned pointer is always a single valid native handle.
  */
-bool ensure_backend() {
-    std::lock_guard<std::mutex> lock(g_backend_mutex);
+struct NativeModel {
+    llama_model *model = nullptr;
+    llama_context *context = nullptr;
 
-    if (g_backend_initialized) {
-        return true;
-    }
+    int32_t n_ctx = 2048;
+};
 
-    try {
-        llama_backend_init();
-        g_backend_initialized = true;
-        return true;
-    } catch (...) {
-        g_backend_initialized = false;
-        return false;
-    }
-}
-
-/**
- * Release the llama.cpp backend.
- */
-void free_backend() {
-    std::lock_guard<std::mutex> lock(g_backend_mutex);
-
-    if (!g_backend_initialized) {
-        return;
-    }
-
-    try {
-        llama_backend_free();
-    } catch (...) {
-        // Never allow native shutdown to escape through JNI.
-    }
-
-    g_backend_initialized = false;
-}
-
-/**
- * Convert a Java String to UTF-8 std::string.
- */
-bool jstring_to_string(
-        JNIEnv * env,
-        jstring value,
-        std::string & output) {
-
-    output.clear();
+static std::string jstring_to_string(
+        JNIEnv *env,
+        jstring value) {
 
     if (env == nullptr || value == nullptr) {
-        return false;
+        return std::string();
     }
 
-    const char * chars =
-            env->GetStringUTFChars(
-                    value,
-                    nullptr
-            );
+    const char *chars =
+            env->GetStringUTFChars(value, nullptr);
 
     if (chars == nullptr) {
-        return false;
+        return std::string();
     }
 
-    output.assign(chars);
+    std::string result(chars);
 
     env->ReleaseStringUTFChars(
             value,
             chars
     );
 
-    return true;
+    return result;
 }
 
-/**
- * Tokenize a prompt.
- *
- * llama_tokenize() returns the required token count as
- * a negative value when the supplied buffer is too small.
- */
-std::vector<llama_token> tokenize(
-        const llama_vocab * vocab,
-        const std::string & text,
-        bool add_bos) {
-
-    if (vocab == nullptr) {
-        return {};
-    }
-
-    const int32_t text_length =
-            static_cast<int32_t>(text.size());
-
-    int32_t required =
-            llama_tokenize(
-                    vocab,
-                    text.c_str(),
-                    text_length,
-                    nullptr,
-                    0,
-                    add_bos,
-                    true
-            );
-
-    if (required >= 0) {
-
-        if (required == 0) {
-            return {};
-        }
-
-        std::vector<llama_token> tokens(
-                static_cast<size_t>(required)
-        );
-
-        const int32_t actual =
-                llama_tokenize(
-                        vocab,
-                        text.c_str(),
-                        text_length,
-                        tokens.data(),
-                        required,
-                        add_bos,
-                        true
-                );
-
-        if (actual < 0) {
-            return {};
-        }
-
-        tokens.resize(
-                static_cast<size_t>(actual)
-        );
-
-        return tokens;
-    }
-
-    const int32_t token_count =
-            -required;
-
-    if (token_count <= 0) {
-        return {};
-    }
-
-    std::vector<llama_token> tokens(
-            static_cast<size_t>(token_count)
-    );
-
-    const int32_t actual =
-            llama_tokenize(
-                    vocab,
-                    text.c_str(),
-                    text_length,
-                    tokens.data(),
-                    token_count,
-                    add_bos,
-                    true
-            );
-
-    if (actual < 0) {
-        return {};
-    }
-
-    tokens.resize(
-            static_cast<size_t>(actual)
-    );
-
-    return tokens;
-}
-
-/**
- * Convert one llama token to its UTF-8 text piece.
- */
-std::string token_to_piece(
-        const llama_vocab * vocab,
-        llama_token token) {
-
-    if (vocab == nullptr) {
-        return {};
-    }
-
-    std::vector<char> buffer(128);
-
-    int32_t size =
-            llama_token_to_piece(
-                    vocab,
-                    token,
-                    buffer.data(),
-                    static_cast<int32_t>(buffer.size()),
-                    0,
-                    true
-            );
-
-    if (size < 0) {
-
-        const int32_t required =
-                -size;
-
-        if (required <= 0) {
-            return {};
-        }
-
-        buffer.resize(
-                static_cast<size_t>(required)
-        );
-
-        size =
-                llama_token_to_piece(
-                        vocab,
-                        token,
-                        buffer.data(),
-                        required,
-                        0,
-                        true
-                );
-    }
-
-    if (size <= 0) {
-        return {};
-    }
-
-    return std::string(
-            buffer.data(),
-            static_cast<size_t>(size)
-    );
-}
-
-/**
- * Create a Java String safely.
- */
-jstring make_java_string(
-        JNIEnv * env,
-        const std::string & value) {
+static jstring string_to_jstring(
+        JNIEnv *env,
+        const std::string &value) {
 
     if (env == nullptr) {
         return nullptr;
@@ -257,534 +79,1031 @@ jstring make_java_string(
     );
 }
 
+static void release_native_model(
+        NativeModel *native_model) {
+
+    if (native_model == nullptr) {
+        return;
+    }
+
+    if (native_model->context != nullptr) {
+
+        llama_free(
+                native_model->context
+        );
+
+        native_model->context = nullptr;
+    }
+
+    if (native_model->model != nullptr) {
+
+        llama_model_free(
+                native_model->model
+        );
+
+        native_model->model = nullptr;
+    }
+
+    delete native_model;
+}
+
+static int32_t tokenize_prompt(
+        const llama_vocab *vocab,
+        const std::string &prompt,
+        std::vector<llama_token> &tokens) {
+
+    if (vocab == nullptr) {
+        return -1;
+    }
+
+    /*
+     * First call obtains the required token count.
+     *
+     * The false flag means:
+     *   do not add BOS automatically.
+     *
+     * We handle prompt formatting explicitly.
+     */
+    int32_t required =
+            llama_tokenize(
+                    vocab,
+                    prompt.c_str(),
+                    static_cast<int32_t>(prompt.size()),
+                    nullptr,
+                    0,
+                    true,
+                    true
+            );
+
+    if (required <= 0) {
+        return -1;
+    }
+
+    tokens.resize(
+            static_cast<size_t>(required)
+    );
+
+    int32_t actual =
+            llama_tokenize(
+                    vocab,
+                    prompt.c_str(),
+                    static_cast<int32_t>(prompt.size()),
+                    tokens.data(),
+                    required,
+                    true,
+                    true
+            );
+
+    if (actual < 0) {
+        return -1;
+    }
+
+    tokens.resize(
+            static_cast<size_t>(actual)
+    );
+
+    return actual;
+}
+
+static llama_token select_token_greedy(
+        llama_context *ctx,
+        int32_t vocab_size) {
+
+    if (ctx == nullptr || vocab_size <= 0) {
+        return 0;
+    }
+
+    const float *logits =
+            llama_get_logits(
+                    ctx
+            );
+
+    if (logits == nullptr) {
+        return 0;
+    }
+
+    int32_t best_token = 0;
+    float best_logit = -INFINITY;
+
+    for (int32_t token = 0;
+         token < vocab_size;
+         ++token) {
+
+        const float value =
+                logits[token];
+
+        if (std::isnan(value)) {
+            continue;
+        }
+
+        if (value > best_logit) {
+
+            best_logit = value;
+            best_token = token;
+        }
+    }
+
+    return static_cast<llama_token>(
+            best_token
+    );
+}
+
+static llama_token sample_token(
+        llama_context *ctx,
+        float temperature,
+        float top_p,
+        std::mt19937 &rng) {
+
+    if (ctx == nullptr) {
+        return 0;
+    }
+
+    const int32_t vocab_size =
+            llama_vocab_n_tokens(
+                    llama_get_model_vocab(
+                            llama_get_model(ctx)
+                    )
+            );
+
+    if (vocab_size <= 0) {
+        return 0;
+    }
+
+    const float *logits =
+            llama_get_logits(
+                    ctx
+            );
+
+    if (logits == nullptr) {
+        return 0;
+    }
+
+    /*
+     * Temperature <= 0 means greedy decoding.
+     */
+    if (temperature <= 0.0f) {
+
+        return select_token_greedy(
+                ctx,
+                vocab_size
+        );
+    }
+
+    struct Candidate {
+        llama_token token;
+        float logit;
+        float probability;
+    };
+
+    std::vector<Candidate> candidates;
+
+    candidates.reserve(
+            static_cast<size_t>(vocab_size)
+    );
+
+    float max_logit = -INFINITY;
+
+    for (int32_t i = 0;
+         i < vocab_size;
+         ++i) {
+
+        const float value =
+                logits[i];
+
+        if (std::isnan(value)) {
+            continue;
+        }
+
+        if (value > max_logit) {
+            max_logit = value;
+        }
+    }
+
+    if (!std::isfinite(max_logit)) {
+        return 0;
+    }
+
+    double probability_sum = 0.0;
+
+    for (int32_t i = 0;
+         i < vocab_size;
+         ++i) {
+
+        const float value =
+                logits[i];
+
+        if (std::isnan(value)) {
+            continue;
+        }
+
+        const double scaled =
+                static_cast<double>(
+                        value - max_logit
+                ) /
+                static_cast<double>(
+                        temperature
+                );
+
+        const double probability =
+                std::exp(scaled);
+
+        if (!std::isfinite(probability)) {
+            continue;
+        }
+
+        candidates.push_back({
+                static_cast<llama_token>(i),
+                value,
+                static_cast<float>(probability)
+        });
+
+        probability_sum += probability;
+    }
+
+    if (candidates.empty() ||
+        probability_sum <= 0.0) {
+
+        return 0;
+    }
+
+    for (Candidate &candidate :
+            candidates) {
+
+        candidate.probability =
+                static_cast<float>(
+                        static_cast<double>(
+                                candidate.probability
+                        ) /
+                        probability_sum
+                );
+    }
+
+    /*
+     * Sort by probability for top-p.
+     */
+    std::sort(
+            candidates.begin(),
+            candidates.end(),
+            [](const Candidate &a,
+               const Candidate &b) {
+
+                return a.probability >
+                       b.probability;
+            }
+    );
+
+    float effective_top_p =
+            top_p;
+
+    if (effective_top_p <= 0.0f) {
+        effective_top_p = 1.0f;
+    }
+
+    if (effective_top_p > 1.0f) {
+        effective_top_p = 1.0f;
+    }
+
+    std::vector<Candidate> filtered;
+
+    filtered.reserve(
+            candidates.size()
+    );
+
+    float cumulative = 0.0f;
+
+    for (const Candidate &candidate :
+            candidates) {
+
+        filtered.push_back(
+                candidate
+        );
+
+        cumulative +=
+                candidate.probability;
+
+        if (cumulative >=
+                effective_top_p) {
+
+            break;
+        }
+    }
+
+    float filtered_sum = 0.0f;
+
+    for (const Candidate &candidate :
+            filtered) {
+
+        filtered_sum +=
+                candidate.probability;
+    }
+
+    if (filtered.empty() ||
+        filtered_sum <= 0.0f) {
+
+        return select_token_greedy(
+                ctx,
+                vocab_size
+        );
+    }
+
+    std::uniform_real_distribution<float>
+            distribution(
+                    0.0f,
+                    filtered_sum
+            );
+
+    float random_value =
+            distribution(rng);
+
+    for (const Candidate &candidate :
+            filtered) {
+
+        random_value -=
+                candidate.probability;
+
+        if (random_value <= 0.0f) {
+
+            return candidate.token;
+        }
+    }
+
+    return filtered.back().token;
+}
+
 } // namespace
-
-
-// ============================================================
-// Engine initialization
-// ============================================================
 
 extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_linguaai_persian_plugins_LocalAIManager_nativeInitEngine(
-        JNIEnv *,
-        jobject) {
+        JNIEnv *env,
+        jobject thiz) {
 
-    return ensure_backend()
-            ? JNI_TRUE
-            : JNI_FALSE;
-}
+    (void) env;
+    (void) thiz;
 
+    std::lock_guard<std::mutex> lock(
+            g_engine_mutex
+    );
 
-// ============================================================
-// Model loading
-// ============================================================
+    if (g_engine_initialized) {
 
-extern "C"
-JNIEXPORT jlong JNICALL
-Java_com_linguaai_persian_plugins_LocalAIManager_nativeLoadModel(
-        JNIEnv * env,
-        jobject,
-        jstring modelPath) {
+        LOGI(
+                "llama.cpp backend already initialized"
+        );
 
-    if (env == nullptr || modelPath == nullptr) {
-        return 0L;
-    }
-
-    if (!ensure_backend()) {
-        return 0L;
-    }
-
-    std::string path;
-
-    if (!jstring_to_string(
-            env,
-            modelPath,
-            path)) {
-
-        return 0L;
-    }
-
-    if (path.empty()) {
-        return 0L;
+        return JNI_TRUE;
     }
 
     try {
 
-        llama_model_params modelParams =
-                llama_model_default_params();
+        llama_backend_init();
 
-        /*
-         * CPU-only configuration.
-         *
-         * CMake also disables GPU backends for the current
-         * Android MVP.
-         */
-        modelParams.n_gpu_layers = 0;
+        g_engine_initialized = true;
 
-        llama_model * model =
-                llama_model_load_from_file(
-                        path.c_str(),
-                        modelParams
-                );
-
-        if (model == nullptr) {
-            return 0L;
-        }
-
-        return reinterpret_cast<jlong>(
-                model
+        LOGI(
+                "llama.cpp backend initialized"
         );
+
+        return JNI_TRUE;
 
     } catch (...) {
 
-        return 0L;
+        g_engine_initialized = false;
+
+        LOGE(
+                "Exception while initializing llama.cpp backend"
+        );
+
+        return JNI_FALSE;
     }
 }
 
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_com_linguaai_persian_plugins_LocalAIManager_nativeLoadModel(
+        JNIEnv *env,
+        jobject thiz,
+        jstring modelPath) {
 
-// ============================================================
-// Inference
-// ============================================================
+    (void) thiz;
+
+    if (env == nullptr ||
+        modelPath == nullptr) {
+
+        LOGE(
+                "nativeLoadModel: invalid arguments"
+        );
+
+        return 0;
+    }
+
+    const std::string path =
+            jstring_to_string(
+                    env,
+                    modelPath
+            );
+
+    if (path.empty()) {
+
+        LOGE(
+                "nativeLoadModel: empty model path"
+        );
+
+        return 0;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(
+                g_engine_mutex
+        );
+
+        if (!g_engine_initialized) {
+
+            LOGI(
+                    "Backend not initialized; initializing now"
+            );
+
+            llama_backend_init();
+
+            g_engine_initialized = true;
+        }
+    }
+
+    LOGI(
+            "Loading GGUF model: %s",
+            path.c_str()
+    );
+
+    llama_model_params model_params =
+            llama_model_default_params();
+
+    /*
+     * Android memory is usually limited.
+     *
+     * mmap is left enabled by llama.cpp's defaults.
+     */
+    model_params.use_mmap = true;
+
+    llama_model *model =
+            llama_model_load_from_file(
+                    path.c_str(),
+                    model_params
+            );
+
+    if (model == nullptr) {
+
+        LOGE(
+                "Failed to load GGUF model: %s",
+                path.c_str()
+        );
+
+        return 0;
+    }
+
+    llama_context_params context_params =
+            llama_context_default_params();
+
+    /*
+     * Conservative defaults suitable for Android.
+     *
+     * These can be changed later if required by the
+     * target device/model.
+     */
+    context_params.n_ctx = 2048;
+    context_params.n_batch = 512;
+    context_params.n_ubatch = 512;
+    context_params.n_threads = 4;
+    context_params.n_threads_batch = 4;
+
+    llama_context *context =
+            llama_init_from_model(
+                    model,
+                    context_params
+            );
+
+    if (context == nullptr) {
+
+        LOGE(
+                "Failed to create llama context"
+        );
+
+        llama_model_free(
+                model
+        );
+
+        return 0;
+    }
+
+    NativeModel *native_model =
+            new NativeModel();
+
+    native_model->model =
+            model;
+
+    native_model->context =
+            context;
+
+    native_model->n_ctx =
+            context_params.n_ctx;
+
+    LOGI(
+            "GGUF model loaded successfully"
+    );
+
+    return reinterpret_cast<jlong>(
+            native_model
+    );
+}
 
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
-        JNIEnv * env,
-        jobject,
+        JNIEnv *env,
+        jobject thiz,
         jlong modelPtr,
         jstring prompt,
         jint maxTokens,
         jfloat temperature,
         jfloat topP) {
 
+    (void) thiz;
+
     if (env == nullptr) {
         return nullptr;
     }
 
-    if (modelPtr == 0L) {
-        return make_java_string(
+    if (modelPtr == 0) {
+
+        return string_to_jstring(
                 env,
-                "Error: invalid model pointer"
+                "Error: invalid native model pointer"
         );
     }
 
     if (prompt == nullptr) {
-        return make_java_string(
+
+        return string_to_jstring(
                 env,
                 "Error: empty prompt"
         );
     }
 
-    /*
-     * Keep backend alive for the entire inference operation.
-     */
-    if (!ensure_backend()) {
-        return make_java_string(
+    NativeModel *native_model =
+            reinterpret_cast<NativeModel *>(
+                    modelPtr
+            );
+
+    if (native_model == nullptr ||
+        native_model->model == nullptr ||
+        native_model->context == nullptr) {
+
+        return string_to_jstring(
                 env,
-                "Error: llama backend is not initialized"
+                "Error: native model is not initialized"
         );
     }
 
-    try {
-
-        auto * model =
-                reinterpret_cast<llama_model *>(
-                        modelPtr
-                );
-
-        if (model == nullptr) {
-            return make_java_string(
+    const std::string input =
+            jstring_to_string(
                     env,
-                    "Error: invalid model"
+                    prompt
             );
-        }
 
-        std::string promptText;
+    if (input.empty()) {
 
-        if (!jstring_to_string(
+        return string_to_jstring(
                 env,
-                prompt,
-                promptText)) {
+                "Error: empty prompt"
+        );
+    }
 
-            return make_java_string(
-                    env,
-                    "Error: unable to read prompt"
+    int requested_tokens =
+            static_cast<int>(
+                    maxTokens
             );
-        }
 
-        if (promptText.empty()) {
-            return make_java_string(
-                    env,
-                    "Error: empty prompt"
+    if (requested_tokens <= 0) {
+        requested_tokens = 128;
+    }
+
+    /*
+     * Prevent an impossible generation length.
+     */
+    const int max_context =
+            static_cast<int>(
+                    native_model->n_ctx
             );
-        }
 
-        const llama_vocab * vocab =
-                llama_model_get_vocab(
-                        model
+    if (requested_tokens >= max_context) {
+
+        requested_tokens =
+                std::max(
+                        1,
+                        max_context - 64
+                );
+    }
+
+    float temp =
+            static_cast<float>(
+                    temperature
+            );
+
+    float top_p =
+            static_cast<float>(
+                    topP
+            );
+
+    if (!std::isfinite(temp)) {
+        temp = 0.7f;
+    }
+
+    if (!std::isfinite(top_p)) {
+        top_p = 0.9f;
+    }
+
+    if (temp < 0.0f) {
+        temp = 0.0f;
+    }
+
+    if (top_p <= 0.0f) {
+        top_p = 1.0f;
+    }
+
+    if (top_p > 1.0f) {
+        top_p = 1.0f;
+    }
+
+    LOGI(
+            "Starting inference. maxTokens=%d temperature=%f topP=%f",
+            requested_tokens,
+            temp,
+            top_p
+    );
+
+    const llama_vocab *vocab =
+            llama_model_get_vocab(
+                    native_model->model
+            );
+
+    if (vocab == nullptr) {
+
+        return string_to_jstring(
+                env,
+                "Error: model vocabulary is unavailable"
+        );
+    }
+
+    std::vector<llama_token> prompt_tokens;
+
+    const int32_t token_count =
+            tokenize_prompt(
+                    vocab,
+                    input,
+                    prompt_tokens
+            );
+
+    if (token_count <= 0) {
+
+        LOGE(
+                "Failed to tokenize prompt"
+        );
+
+        return string_to_jstring(
+                env,
+                "Error: failed to tokenize prompt"
+        );
+    }
+
+    if (token_count >=
+            native_model->n_ctx) {
+
+        return string_to_jstring(
+                env,
+                "Error: prompt is too long for context"
+        );
+    }
+
+    /*
+     * Clear the context before every independent request.
+     */
+    llama_memory_clear(
+            llama_get_memory(
+                    native_model->context
+            ),
+            true
+    );
+
+    llama_batch batch =
+            llama_batch_init(
+                    static_cast<int32_t>(
+                            prompt_tokens.size()
+                    ),
+                    0,
+                    1
+            );
+
+    if (batch.token == nullptr ||
+        batch.pos == nullptr ||
+        batch.n_seq_id == nullptr ||
+        batch.seq_id == nullptr ||
+        batch.logits == nullptr) {
+
+        llama_batch_free(
+                batch
+        );
+
+        return string_to_jstring(
+                env,
+                "Error: failed to allocate llama batch"
+        );
+    }
+
+    /*
+     * Feed prompt tokens.
+     *
+     * Only the final prompt token requests logits.
+     */
+    for (int32_t i = 0;
+         i < token_count;
+         ++i) {
+
+        batch.token[i] =
+                prompt_tokens[
+                        static_cast<size_t>(i)
+                ];
+
+        batch.pos[i] = i;
+
+        batch.n_seq_id[i] = 1;
+
+        batch.seq_id[i][0] = 0;
+
+        batch.logits[i] =
+                (i == token_count - 1)
+                ? 1
+                : 0;
+    }
+
+    batch.n_tokens =
+            token_count;
+
+    if (llama_decode(
+            native_model->context,
+            batch
+    ) != 0) {
+
+        llama_batch_free(
+                batch
+        );
+
+        LOGE(
+                "llama_decode failed while processing prompt"
+        );
+
+        return string_to_jstring(
+                env,
+                "Error: llama_decode failed"
+        );
+    }
+
+    llama_batch_free(
+            batch
+    );
+
+    /*
+     * Random generator for temperature/top-p sampling.
+     */
+    std::random_device random_device;
+
+    std::mt19937 rng(
+            random_device()
+    );
+
+    std::string output;
+
+    output.reserve(
+            static_cast<size_t>(
+                    requested_tokens
+            ) * 4
+    );
+
+    llama_token eos_token =
+            llama_vocab_eos(
+                    vocab
+            );
+
+    llama_token eot_token =
+            llama_vocab_eot(
+                    vocab
+            );
+
+    llama_token eom_token =
+            llama_vocab_eom(
+                    vocab
+            );
+
+    int32_t current_position =
+            token_count;
+
+    for (int step = 0;
+         step < requested_tokens;
+         ++step) {
+
+        llama_token next_token =
+                sample_token(
+                        native_model->context,
+                        temp,
+                        top_p,
+                        rng
                 );
 
-        if (vocab == nullptr) {
-            return make_java_string(
-                    env,
-                    "Error: model vocabulary is unavailable"
-            );
+        if (next_token == eos_token ||
+            next_token == eot_token ||
+            next_token == eom_token) {
+
+            break;
         }
 
         /*
-         * Limit generation to a sane Android-side range.
+         * Convert token to UTF-8 piece.
          */
-        const int32_t n_predict =
-                std::max(
-                        1,
-                        std::min(
-                                static_cast<int32_t>(maxTokens),
-                                static_cast<int32_t>(1024)
-                        )
-                );
+        char piece[8192];
 
-        std::vector<llama_token> promptTokens =
-                tokenize(
+        const int32_t piece_length =
+                llama_token_to_piece(
                         vocab,
-                        promptText,
+                        next_token,
+                        piece,
+                        static_cast<int32_t>(
+                                sizeof(piece)
+                        ),
+                        0,
                         true
                 );
 
-        if (promptTokens.empty()) {
-            return make_java_string(
-                    env,
-                    "Error: prompt tokenization failed"
+        if (piece_length < 0) {
+
+            LOGE(
+                    "llama_token_to_piece failed"
             );
+
+            break;
         }
 
-        /*
-         * Context size must contain both the prompt and
-         * the requested generated tokens.
-         *
-         * Keep the Android MVP bounded to 2048 tokens.
-         */
-        const uint32_t requestedContext =
-                static_cast<uint32_t>(
-                        promptTokens.size()
-                )
-                +
-                static_cast<uint32_t>(
-                        n_predict
-                )
-                +
-                8U;
+        if (piece_length > 0) {
 
-        const uint32_t contextSize =
-                std::max(
-                        32U,
-                        std::min(
-                                2048U,
-                                requestedContext
-                        )
-                );
-
-        /*
-         * If the prompt itself is larger than the context,
-         * fail cleanly instead of allowing an invalid decode.
-         */
-        if (promptTokens.size() >= contextSize) {
-
-            return make_java_string(
-                    env,
-                    "Error: prompt is too long for context"
-            );
-        }
-
-        llama_context_params contextParams =
-                llama_context_default_params();
-
-        contextParams.n_ctx =
-                contextSize;
-
-        /*
-         * Keep batch size bounded for Android memory usage.
-         */
-        contextParams.n_batch =
-                std::min(
-                        512U,
-                        contextSize
-                );
-
-        contextParams.n_ubatch =
-                std::min(
-                        contextParams.n_ubatch,
-                        contextParams.n_batch
-                );
-
-        /*
-         * CPU threading.
-         *
-         * llama.cpp will use these values for prompt processing
-         * and generation.
-         */
-        contextParams.n_threads = 4;
-        contextParams.n_threads_batch = 4;
-
-        llama_context * ctx =
-                llama_init_from_model(
-                        model,
-                        contextParams
-                );
-
-        if (ctx == nullptr) {
-
-            return make_java_string(
-                    env,
-                    "Error: failed to create llama context"
-            );
-        }
-
-        /*
-         * Sampler chain.
-         */
-        llama_sampler_chain_params samplerParams =
-                llama_sampler_chain_default_params();
-
-        llama_sampler * sampler =
-                llama_sampler_chain_init(
-                        samplerParams
-                );
-
-        if (sampler == nullptr) {
-
-            llama_free(ctx);
-
-            return make_java_string(
-                    env,
-                    "Error: failed to create sampler"
-            );
-        }
-
-        /*
-         * Sanitize user parameters.
-         */
-        const float safeTemperature =
-                std::max(
-                        0.0f,
-                        std::min(
-                                2.0f,
-                                static_cast<float>(temperature)
-                        )
-                );
-
-        const float safeTopP =
-                std::max(
-                        0.01f,
-                        std::min(
-                                1.0f,
-                                static_cast<float>(topP)
-                        )
-                );
-
-        /*
-         * Deterministic generation when temperature is zero.
-         */
-        if (safeTemperature <= 0.001f) {
-
-            llama_sampler_chain_add(
-                    sampler,
-                    llama_sampler_init_greedy()
-            );
-
-        } else {
-
-            llama_sampler_chain_add(
-                    sampler,
-                    llama_sampler_init_top_k(40)
-            );
-
-            llama_sampler_chain_add(
-                    sampler,
-                    llama_sampler_init_top_p(
-                            safeTopP,
-                            1
-                    )
-            );
-
-            llama_sampler_chain_add(
-                    sampler,
-                    llama_sampler_init_temp(
-                            safeTemperature
-                    )
-            );
-
-            llama_sampler_chain_add(
-                    sampler,
-                    llama_sampler_init_dist(
-                            LLAMA_DEFAULT_SEED
+            output.append(
+                    piece,
+                    static_cast<size_t>(
+                            piece_length
                     )
             );
         }
 
         /*
-         * Evaluate the complete prompt first.
+         * Prepare next one-token batch.
          */
-        llama_batch batch =
-                llama_batch_get_one(
-                        promptTokens.data(),
-                        static_cast<int32_t>(
-                                promptTokens.size()
-                        )
+        llama_batch next_batch =
+                llama_batch_init(
+                        1,
+                        0,
+                        1
                 );
 
-        if (llama_decode(
-                ctx,
-                batch
-        ) != 0) {
+        if (next_batch.token == nullptr ||
+            next_batch.pos == nullptr ||
+            next_batch.n_seq_id == nullptr ||
+            next_batch.seq_id == nullptr ||
+            next_batch.logits == nullptr) {
 
-            llama_sampler_free(
-                    sampler
+            llama_batch_free(
+                    next_batch
             );
 
-            llama_free(
-                    ctx
+            LOGE(
+                    "Failed to allocate generation batch"
             );
 
-            return make_java_string(
-                    env,
-                    "Error: prompt evaluation failed"
-            );
+            break;
         }
 
-        /*
-         * Generate response.
-         */
-        std::string output;
+        next_batch.token[0] =
+                next_token;
 
-        output.reserve(
-                static_cast<size_t>(
-                        n_predict
-                ) * 4U
+        next_batch.pos[0] =
+                current_position;
+
+        next_batch.n_seq_id[0] =
+                1;
+
+        next_batch.seq_id[0][0] =
+                0;
+
+        next_batch.logits[0] =
+                1;
+
+        next_batch.n_tokens =
+                1;
+
+        const int decode_result =
+                llama_decode(
+                        native_model->context,
+                        next_batch
+                );
+
+        llama_batch_free(
+                next_batch
         );
 
-        for (
-                int32_t generated = 0;
-                generated < n_predict;
-                ++generated) {
+        if (decode_result != 0) {
 
-            const llama_token token =
-                    llama_sampler_sample(
-                            sampler,
-                            ctx,
-                            -1
-                    );
+            LOGE(
+                    "llama_decode failed during generation"
+            );
 
-            /*
-             * Stop at end-of-generation token.
-             */
-            if (llama_vocab_is_eog(
-                    vocab,
-                    token
-            )) {
-                break;
-            }
-
-            const std::string piece =
-                    token_to_piece(
-                            vocab,
-                            token
-                    );
-
-            output += piece;
-
-            /*
-             * Feed generated token back into context.
-             */
-            batch =
-                    llama_batch_get_one(
-                            &token,
-                            1
-                    );
-
-            if (llama_decode(
-                    ctx,
-                    batch
-            ) != 0) {
-                break;
-            }
+            break;
         }
 
-        /*
-         * Release inference-specific resources.
-         *
-         * The model remains alive and is owned by Java's
-         * nativeModelPtr until nativeUnloadModel().
-         */
-        llama_sampler_free(
-                sampler
-        );
+        ++current_position;
 
-        llama_free(
-                ctx
-        );
+        if (current_position >=
+                native_model->n_ctx - 1) {
 
-        return make_java_string(
-                env,
-                output
-        );
+            LOGI(
+                    "Context limit reached"
+            );
 
-    } catch (...) {
-
-        return make_java_string(
-                env,
-                "Error: native inference exception"
-        );
+            break;
+        }
     }
+
+    LOGI(
+            "Inference completed. Output length=%zu",
+            output.size()
+    );
+
+    if (output.empty()) {
+
+        output =
+                "Error: model returned empty output";
+    }
+
+    return string_to_jstring(
+            env,
+            output
+    );
 }
-
-
-// ============================================================
-// Model unloading
-// ============================================================
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_linguaai_persian_plugins_LocalAIManager_nativeUnloadModel(
-        JNIEnv *,
-        jobject,
+        JNIEnv *env,
+        jobject thiz,
         jlong modelPtr) {
 
-    if (modelPtr == 0L) {
+    (void) env;
+    (void) thiz;
+
+    if (modelPtr == 0) {
         return;
     }
 
-    try {
-
-        auto * model =
-                reinterpret_cast<llama_model *>(
-                        modelPtr
-                );
-
-        if (model != nullptr) {
-            llama_model_free(
-                    model
+    NativeModel *native_model =
+            reinterpret_cast<NativeModel *>(
+                    modelPtr
             );
-        }
 
-    } catch (...) {
+    LOGI(
+            "Unloading native model"
+    );
 
-        /*
-         * Never throw a C++ exception through JNI.
-         */
-    }
+    release_native_model(
+            native_model
+    );
 }
-
-
-// ============================================================
-// Backend shutdown
-// ============================================================
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_linguaai_persian_plugins_LocalAIManager_nativeFreeEngine(
-        JNIEnv *,
-        jobject) {
+        JNIEnv *env,
+        jobject thiz) {
 
-    free_backend();
+    (void) env;
+    (void) thiz;
+
+    std::lock_guard<std::mutex> lock(
+            g_engine_mutex
+    );
+
+    if (!g_engine_initialized) {
+        return;
+    }
+
+    LOGI(
+            "Freeing llama.cpp backend"
+    );
+
+    llama_backend_free();
+
+    g_engine_initialized = false;
 }
