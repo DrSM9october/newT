@@ -3,35 +3,69 @@ package com.linguaai.persian.plugins;
 import android.content.Context;
 import android.util.Log;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * LocalAIManager
+ * Manager for the local llama.cpp AI engine.
  *
- * Java bridge between the Android application and the native
- * llama.cpp implementation.
+ * Java layer:
+ *   LocalAIManager
  *
- * Native library:
- *     android/app/src/main/cpp/jni/llama_jni.cpp
- *
- * CMake library name:
- *     linguaai_localai
+ * Native layer:
+ *   llama_jni.cpp
  */
 public class LocalAIManager {
 
     private static final String TAG = "LinguaAI-LocalAI";
 
+    private static final int DEFAULT_MAX_TOKENS = 128;
+    private static final float DEFAULT_TEMPERATURE = 0.7f;
+    private static final float DEFAULT_TOP_P = 0.9f;
+
+    private final Context context;
+
+    /**
+     * Native engine state.
+     */
+    private boolean engineReady = false;
+
+    /**
+     * Native model pointer returned by nativeLoadModel().
+     */
+    private long nativeModelPtr = 0L;
+
+    /**
+     * Logical ID/path of the currently loaded model.
+     */
+    private String loadedModelId = null;
+
+    /**
+     * Prevent double native loading/freeing.
+     */
+    private boolean nativeLibraryLoaded = false;
+
+    public LocalAIManager(Context context) {
+        this.context = context.getApplicationContext();
+        loadNativeLibrary();
+    }
+
     // ============================================================
     // Native library
     // ============================================================
 
-    static {
+    private synchronized void loadNativeLibrary() {
+
+        if (nativeLibraryLoaded) {
+            return;
+        }
+
         try {
+
             System.loadLibrary("linguaai_localai");
+
+            nativeLibraryLoaded = true;
 
             Log.d(
                     TAG,
@@ -40,76 +74,15 @@ public class LocalAIManager {
 
         } catch (UnsatisfiedLinkError e) {
 
+            nativeLibraryLoaded = false;
+
             Log.e(
                     TAG,
-                    "Failed to load native library: linguaai_localai",
+                    "Failed to load linguaai_localai",
                     e
             );
         }
     }
-
-    // ============================================================
-    // Singleton
-    // ============================================================
-
-    private static volatile LocalAIManager instance;
-
-    private final Context context;
-
-    private LocalAIManager(Context context) {
-
-        this.context =
-                context.getApplicationContext();
-
-        Log.d(
-                TAG,
-                "LocalAIManager created"
-        );
-    }
-
-    public static LocalAIManager getInstance(
-            Context context) {
-
-        if (instance == null) {
-
-            synchronized (LocalAIManager.class) {
-
-                if (instance == null) {
-
-                    instance =
-                            new LocalAIManager(context);
-                }
-            }
-        }
-
-        return instance;
-    }
-
-    // ============================================================
-    // Native state
-    // ============================================================
-
-    /**
-     * Indicates whether llama.cpp backend has been initialized.
-     */
-    private volatile boolean engineInitialized = false;
-
-    /**
-     * Native pointer returned by nativeLoadModel().
-     */
-    private volatile long modelPtr = 0L;
-
-    /**
-     * Logical ID of currently loaded model.
-     *
-     * This is NOT the native pointer.
-     */
-    private volatile String loadedModelId = null;
-
-    /**
-     * Path of currently loaded model.
-     */
-    private volatile String loadedModelPath = null;
 
     // ============================================================
     // Native methods
@@ -141,12 +114,10 @@ public class LocalAIManager {
 
     /**
      * Initialize llama.cpp backend.
-     *
-     * @return true if engine is ready.
      */
-    public synchronized boolean initEngine() {
+    public synchronized boolean initializeEngine() {
 
-        if (engineInitialized) {
+        if (engineReady) {
 
             Log.d(
                     TAG,
@@ -156,52 +127,31 @@ public class LocalAIManager {
             return true;
         }
 
-        try {
-
-            Log.d(
-                    TAG,
-                    "Initializing llama.cpp engine..."
-            );
-
-            boolean result =
-                    nativeInitEngine();
-
-            if (result) {
-
-                engineInitialized = true;
-
-                Log.d(
-                        TAG,
-                        "Engine initialized successfully"
-                );
-
-            } else {
-
-                engineInitialized = false;
-
-                Log.e(
-                        TAG,
-                        "nativeInitEngine returned false"
-                );
-            }
-
-            return result;
-
-        } catch (UnsatisfiedLinkError e) {
-
-            engineInitialized = false;
+        if (!nativeLibraryLoaded) {
 
             Log.e(
                     TAG,
-                    "Native engine method is unavailable",
-                    e
+                    "Native library is not loaded"
             );
 
             return false;
+        }
 
-        } catch (Exception e) {
+        try {
 
-            engineInitialized = false;
+            engineReady = nativeInitEngine();
+
+            Log.d(
+                    TAG,
+                    "Engine initialization result: "
+                            + engineReady
+            );
+
+            return engineReady;
+
+        } catch (Throwable e) {
+
+            engineReady = false;
 
             Log.e(
                     TAG,
@@ -213,74 +163,66 @@ public class LocalAIManager {
         }
     }
 
-    // ============================================================
-    // Required by LocalAIPlugin
-    // ============================================================
+    /**
+     * Alias for code that expects initEngine().
+     */
+    public synchronized boolean initEngine() {
+        return initializeEngine();
+    }
 
     /**
-     * Returns whether the llama.cpp engine is initialized.
+     * Returns whether the native llama.cpp engine is ready.
      *
-     * Used by LocalAIPlugin.java:
-     *
-     *     aiManager.isEngineReady()
+     * This method is required by LocalAIPlugin.java.
      */
     public synchronized boolean isEngineReady() {
-
-        return engineInitialized;
+        return engineReady;
     }
 
     // ============================================================
-    // Model loading
+    // Model
     // ============================================================
 
     /**
      * Load a GGUF model.
      *
-     * The model ID is derived from the file name.
-     *
      * @param modelPath absolute path to GGUF file
-     * @return true if model was loaded successfully
+     * @return true when successfully loaded
      */
     public synchronized boolean loadModel(
-            String modelPath) {
+            String modelPath
+    ) {
 
         if (modelPath == null ||
                 modelPath.trim().isEmpty()) {
 
             Log.e(
                     TAG,
-                    "loadModel: modelPath is empty"
+                    "loadModel: empty model path"
             );
 
             return false;
         }
 
-        if (!engineInitialized) {
+        if (!engineReady) {
 
             Log.d(
                     TAG,
-                    "Engine is not initialized. Initializing..."
+                    "Engine is not ready. Initializing..."
             );
 
-            if (!initEngine()) {
-
-                Log.e(
-                        TAG,
-                        "Unable to initialize engine"
-                );
-
+            if (!initializeEngine()) {
                 return false;
             }
         }
 
-        File modelFile =
-                new File(modelPath);
+        File modelFile = new File(modelPath);
 
         if (!modelFile.exists()) {
 
             Log.e(
                     TAG,
-                    "Model file does not exist: "
+                    "Model does not exist: "
                             + modelPath
             );
 
@@ -298,18 +240,10 @@ public class LocalAIManager {
             return false;
         }
 
-        // --------------------------------------------------------
-        // If another model is loaded, unload it first.
-        // --------------------------------------------------------
-
-        if (modelPtr != 0L) {
-
-            Log.d(
-                    TAG,
-                    "Another model is already loaded. "
-                            + "Unloading it first."
-            );
-
+        /*
+         * اگر مدل دیگری load شده، ابتدا آزادش می‌کنیم.
+         */
+        if (nativeModelPtr != 0L) {
             unloadModel();
         }
 
@@ -321,10 +255,9 @@ public class LocalAIManager {
                             + modelPath
             );
 
-            long ptr =
-                    nativeLoadModel(
-                            modelPath
-                    );
+            long ptr = nativeLoadModel(
+                    modelPath
+            );
 
             if (ptr == 0L) {
 
@@ -333,51 +266,29 @@ public class LocalAIManager {
                         "nativeLoadModel returned 0"
                 );
 
+                nativeModelPtr = 0L;
+                loadedModelId = null;
+
                 return false;
             }
 
-            modelPtr = ptr;
-
-            loadedModelPath =
-                    modelPath;
+            nativeModelPtr = ptr;
 
             loadedModelId =
-                    modelFile.getName();
+                    modelFile.getAbsolutePath();
 
             Log.d(
                     TAG,
-                    "Model loaded successfully"
-            );
-
-            Log.d(
-                    TAG,
-                    "Model ID: "
+                    "Model loaded successfully: "
                             + loadedModelId
-            );
-
-            Log.d(
-                    TAG,
-                    "Native handle: "
-                            + modelPtr
             );
 
             return true;
 
-        } catch (UnsatisfiedLinkError e) {
+        } catch (Throwable e) {
 
-            Log.e(
-                    TAG,
-                    "Native model loading method unavailable",
-                    e
-            );
-
-            modelPtr = 0L;
+            nativeModelPtr = 0L;
             loadedModelId = null;
-            loadedModelPath = null;
-
-            return false;
-
-        } catch (Exception e) {
 
             Log.e(
                     TAG,
@@ -385,265 +296,65 @@ public class LocalAIManager {
                     e
             );
 
-            modelPtr = 0L;
-            loadedModelId = null;
-            loadedModelPath = null;
-
             return false;
         }
     }
 
-    // ============================================================
-    // Optional overload
-    // ============================================================
-
     /**
-     * Load a GGUF model with an explicit logical ID.
+     * Returns the currently loaded model ID/path.
      *
-     * This overload is useful if another part of the application
-     * already has a model ID.
-     *
-     * @param modelId logical model ID
-     * @param modelPath absolute GGUF path
-     * @return true if successful
-     */
-    public synchronized boolean loadModel(
-            String modelId,
-            String modelPath) {
-
-        boolean loaded =
-                loadModel(modelPath);
-
-        if (loaded) {
-
-            if (modelId != null &&
-                    !modelId.trim().isEmpty()) {
-
-                loadedModelId =
-                        modelId;
-            }
-        }
-
-        return loaded;
-    }
-
-    // ============================================================
-    // Loaded model ID
-    // ============================================================
-
-    /**
-     * Returns the logical ID of the currently loaded model.
-     *
-     * Used by LocalAIPlugin.java:
-     *
-     *     aiManager.getLoadedModelId()
+     * This method is required by LocalAIPlugin.java.
      */
     public synchronized String getLoadedModelId() {
-
         return loadedModelId;
     }
 
-    // ============================================================
-    // Installed models
-    // ============================================================
+    /**
+     * Returns whether a native model is currently loaded.
+     */
+    public synchronized boolean isModelLoaded() {
+
+        return nativeModelPtr != 0L &&
+                loadedModelId != null;
+    }
 
     /**
-     * Returns installed GGUF models.
-     *
-     * LocalAIPlugin.java expects a JSONArray because it calls:
-     *
-     *     aiManager.getInstalledModels().length()
-     *
-     * The method scans the application's model directory.
+     * Unload current model.
      */
-    public synchronized JSONArray getInstalledModels() {
+    public synchronized void unloadModel() {
 
-        JSONArray result =
-                new JSONArray();
+        if (nativeModelPtr == 0L) {
+
+            loadedModelId = null;
+
+            return;
+        }
 
         try {
 
-            File modelsDirectory =
-                    new File(
-                            context.getFilesDir(),
-                            "models"
-                    );
+            Log.d(
+                    TAG,
+                    "Unloading model: "
+                            + loadedModelId
+            );
 
-            if (!modelsDirectory.exists()) {
+            nativeUnloadModel(
+                    nativeModelPtr
+            );
 
-                if (!modelsDirectory.mkdirs()) {
-
-                    Log.w(
-                            TAG,
-                            "Could not create models directory: "
-                                    + modelsDirectory
-                    );
-                }
-            }
-
-            File[] files =
-                    modelsDirectory.listFiles();
-
-            if (files == null) {
-
-                return result;
-            }
-
-            for (File file : files) {
-
-                if (file == null ||
-                        !file.isFile()) {
-
-                    continue;
-                }
-
-                String name =
-                        file.getName();
-
-                if (!name.toLowerCase()
-                        .endsWith(".gguf")) {
-
-                    continue;
-                }
-
-                JSONObject model =
-                        new JSONObject();
-
-                model.put(
-                        "id",
-                        name
-                );
-
-                model.put(
-                        "name",
-                        name
-                );
-
-                model.put(
-                        "path",
-                        file.getAbsolutePath()
-                );
-
-                model.put(
-                        "size",
-                        file.length()
-                );
-
-                model.put(
-                        "loaded",
-                        name.equals(
-                                loadedModelId
-                        )
-                );
-
-                result.put(
-                        model
-                );
-            }
-
-        } catch (JSONException e) {
+        } catch (Throwable e) {
 
             Log.e(
                     TAG,
-                    "Failed to create installed model JSON",
+                    "Error unloading model",
                     e
             );
 
-        } catch (Exception e) {
+        } finally {
 
-            Log.e(
-                    TAG,
-                    "Failed to scan installed models",
-                    e
-            );
+            nativeModelPtr = 0L;
+            loadedModelId = null;
         }
-
-        /*
-         * اگر مدل فعلی خارج از پوشه models بارگذاری شده باشد،
-         * آن را هم در لیست قرار می‌دهیم تا Plugin بتواند وضعیت
-         * فعلی را مشاهده کند.
-         */
-        if (loadedModelPath != null &&
-                modelPtr != 0L) {
-
-            boolean alreadyExists =
-                    false;
-
-            for (int i = 0;
-                 i < result.length();
-                 i++) {
-
-                JSONObject item =
-                        result.optJSONObject(i);
-
-                if (item == null) {
-                    continue;
-                }
-
-                String path =
-                        item.optString(
-                                "path",
-                                ""
-                        );
-
-                if (loadedModelPath.equals(path)) {
-
-                    alreadyExists = true;
-
-                    break;
-                }
-            }
-
-            if (!alreadyExists) {
-
-                try {
-
-                    JSONObject current =
-                            new JSONObject();
-
-                    current.put(
-                            "id",
-                            loadedModelId
-                    );
-
-                    current.put(
-                            "name",
-                            loadedModelId
-                    );
-
-                    current.put(
-                            "path",
-                            loadedModelPath
-                    );
-
-                    current.put(
-                            "size",
-                            new File(
-                                    loadedModelPath
-                            ).length()
-                    );
-
-                    current.put(
-                            "loaded",
-                            true
-                    );
-
-                    result.put(
-                            current
-                    );
-
-                } catch (JSONException e) {
-
-                    Log.e(
-                            TAG,
-                            "Failed to add current model",
-                            e
-                    );
-                }
-            }
-        }
-
-        return result;
     }
 
     // ============================================================
@@ -651,51 +362,55 @@ public class LocalAIManager {
     // ============================================================
 
     /**
-     * Run local inference.
-     *
-     * @param prompt prompt text
-     * @param maxTokens maximum generated tokens
-     * @param temperature sampling temperature
-     * @param topP top-p sampling
-     * @return generated response or error string
+     * Run inference using default parameters.
+     */
+    public synchronized String runInference(
+            String prompt
+    ) {
+
+        return runInference(
+                prompt,
+                DEFAULT_MAX_TOKENS,
+                DEFAULT_TEMPERATURE,
+                DEFAULT_TOP_P
+        );
+    }
+
+    /**
+     * Run inference using custom parameters.
      */
     public synchronized String runInference(
             String prompt,
             int maxTokens,
             float temperature,
-            float topP) {
-
-        if (!engineInitialized) {
-
-            return "Error: engine is not initialized";
-        }
-
-        if (modelPtr == 0L) {
-
-            return "Error: no model is loaded";
-        }
+            float topP
+    ) {
 
         if (prompt == null ||
                 prompt.trim().isEmpty()) {
 
-            return "Error: prompt is empty";
+            return "Error: empty prompt";
+        }
+
+        if (!engineReady) {
+
+            return "Error: engine is not initialized";
+        }
+
+        if (nativeModelPtr == 0L) {
+
+            return "Error: no model loaded";
         }
 
         try {
 
-            Log.d(
-                    TAG,
-                    "Running inference..."
+            String result = nativeRunInference(
+                    nativeModelPtr,
+                    prompt,
+                    maxTokens,
+                    temperature,
+                    topP
             );
-
-            String result =
-                    nativeRunInference(
-                            modelPtr,
-                            prompt,
-                            maxTokens,
-                            temperature,
-                            topP
-                    );
 
             if (result == null) {
 
@@ -704,17 +419,7 @@ public class LocalAIManager {
 
             return result;
 
-        } catch (UnsatisfiedLinkError e) {
-
-            Log.e(
-                    TAG,
-                    "Native inference method unavailable",
-                    e
-            );
-
-            return "Error: native inference unavailable";
-
-        } catch (Exception e) {
+        } catch (Throwable e) {
 
             Log.e(
                     TAG,
@@ -728,88 +433,177 @@ public class LocalAIManager {
     }
 
     // ============================================================
-    // Convenience inference
+    // Installed models
     // ============================================================
 
     /**
-     * Run inference using safe default parameters.
+     * Returns installed GGUF models.
+     *
+     * This method is required by LocalAIPlugin.java.
+     *
+     * The result is a JSON-like array of absolute file paths
+     * represented as a Java String[].
      */
-    public synchronized String runInference(
-            String prompt) {
+    public synchronized String[] getInstalledModels() {
 
-        return runInference(
-                prompt,
-                128,
-                0.7f,
-                0.9f
+        List<String> models =
+                new ArrayList<>();
+
+        /*
+         * Search locations:
+         *
+         * 1. app files/models
+         * 2. app external files/models
+         *
+         * We intentionally don't scan the entire device.
+         */
+
+        File internalModelsDir =
+                new File(
+                        context.getFilesDir(),
+                        "models"
+                );
+
+        addGgufFiles(
+                internalModelsDir,
+                models
+        );
+
+        File externalFilesDir =
+                context.getExternalFilesDir(null);
+
+        if (externalFilesDir != null) {
+
+            File externalModelsDir =
+                    new File(
+                            externalFilesDir,
+                            "models"
+                    );
+
+            addGgufFiles(
+                    externalModelsDir,
+                    models
+            );
+        }
+
+        /*
+         * اگر مدل فعلی در لیست نبود، آن را اضافه کن.
+         *
+         * این کار باعث می‌شود Plugin بتواند مدلی را که
+         * از مسیر دیگری load شده نیز ببیند.
+         */
+        if (loadedModelId != null &&
+                !models.contains(loadedModelId)) {
+
+            File loadedFile =
+                    new File(
+                            loadedModelId
+                    );
+
+            if (loadedFile.exists() &&
+                    loadedFile.isFile()) {
+
+                models.add(
+                        loadedFile.getAbsolutePath()
+                );
+            }
+        }
+
+        return models.toArray(
+                new String[0]
         );
     }
 
-    // ============================================================
-    // Model unload
-    // ============================================================
-
     /**
-     * Unload the currently loaded native model.
+     * Add GGUF files from a directory.
      */
-    public synchronized void unloadModel() {
+    private void addGgufFiles(
+            File directory,
+            List<String> result
+    ) {
 
-        if (modelPtr == 0L) {
-
-            loadedModelId = null;
-            loadedModelPath = null;
+        if (directory == null ||
+                result == null) {
 
             return;
         }
 
-        long ptr =
-                modelPtr;
+        if (!directory.exists() ||
+                !directory.isDirectory()) {
 
-        Log.d(
-                TAG,
-                "Unloading model: "
-                        + loadedModelId
-        );
+            return;
+        }
 
-        try {
+        File[] files =
+                directory.listFiles();
 
-            nativeUnloadModel(
-                    ptr
-            );
+        if (files == null) {
+            return;
+        }
 
-        } catch (UnsatisfiedLinkError e) {
+        for (File file : files) {
 
-            Log.e(
-                    TAG,
-                    "Native unload method unavailable",
-                    e
-            );
+            if (file == null ||
+                    !file.isFile()) {
 
-        } catch (Exception e) {
+                continue;
+            }
 
-            Log.e(
-                    TAG,
-                    "Model unload failed",
-                    e
-            );
+            String name =
+                    file.getName()
+                            .toLowerCase();
 
-        } finally {
+            if (name.endsWith(".gguf")) {
 
-            modelPtr = 0L;
-
-            loadedModelId = null;
-
-            loadedModelPath = null;
+                result.add(
+                        file.getAbsolutePath()
+                );
+            }
         }
     }
 
     // ============================================================
-    // Engine shutdown
+    // Shutdown
     // ============================================================
 
     /**
-     * Free llama.cpp backend.
-     *
-     * Model should be unloaded before freeing the engine.
+     * Release model and llama.cpp backend.
      */
-    public synchronized void
+    public synchronized void release() {
+
+        Log.d(
+                TAG,
+                "Releasing LocalAIManager"
+        );
+
+        /*
+         * مدل باید قبل از backend آزاد شود.
+         */
+        unloadModel();
+
+        if (engineReady) {
+
+            try {
+
+                nativeFreeEngine();
+
+            } catch (Throwable e) {
+
+                Log.e(
+                        TAG,
+                        "Error freeing native engine",
+                        e
+                );
+            }
+        }
+
+        engineReady = false;
+    }
+
+    /**
+     * Alias for code that expects shutdown().
+     */
+    public synchronized void shutdown() {
+        release();
+    }
+}
