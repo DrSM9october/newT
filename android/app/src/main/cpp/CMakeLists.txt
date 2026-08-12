@@ -1,43 +1,45 @@
 cmake_minimum_required(VERSION 3.22)
+
 project("linguaai_localai")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(LLAMA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp)
+set(LLAMA_PATH
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/llama.cpp
+)
 
-# غیرفعال کردن ویژگی‌های اضافی
-set(LLAMA_CUBLAS OFF CACHE BOOL "" FORCE)
-set(LLAMA_METAL OFF CACHE BOOL "" FORCE)
-set(LLAMA_OPENMP OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+# Android / CPU فقط
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
-set(LLAMA_NATIVE OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 
-add_subdirectory(${LLAMA_PATH} ${CMAKE_CURRENT_BINARY_DIR}/llama)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 
-add_library(liblinguaai_localai SHARED
+add_subdirectory(
+    ${LLAMA_PATH}
+    ${CMAKE_CURRENT_BINARY_DIR}/llama
+)
+
+find_library(log-lib log)
+
+add_library(
+    linguaai_localai
+    SHARED
     jni/llama_jni.cpp
 )
 
-target_link_libraries(liblinguaai_localai
-    llama
-    ggml
-    ggml-base
-    ${log-lib}
-)
-
-target_include_directories(liblinguaai_localai PRIVATE
-    ${LLAMA_PATH}
-    ${LLAMA_PATH}/common
+target_include_directories(
+    linguaai_localai
+    PRIVATE
+    ${LLAMA_PATH}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/jni
 )
 
-target_compile_options(liblinguaai_localai PRIVATE
-    -O3
-    -DNDEBUG
-    -fPIC
-    -funroll-loops
-    -march=armv8.2-a+fp16+rcpc+dotprod+crypto
+target_link_libraries(
+    linguaai_localai
+    llama
+    ${log-lib}
 )
