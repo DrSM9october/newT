@@ -15,6 +15,7 @@ import android.webkit.WebView;
 import androidx.annotation.Nullable;
 
 import com.getcapacitor.BridgeActivity;
+import com.linguaai.persian.plugins.LocalAIPlugin;
 
 import org.json.JSONObject;
 
@@ -42,6 +43,20 @@ public class MainActivity extends BridgeActivity {
     ) {
         super.onCreate(savedInstanceState);
 
+        /*
+         * ============================================================
+         * LocalAI Capacitor Plugin
+         * ============================================================
+         *
+         * ثبت Native Plugin قبل از استفاده JavaScript از:
+         *
+         * Capacitor.Plugins.LocalAI
+         *
+         * این بخش هیچ تغییری در Gemini / Offline / TTS / Speech
+         * ایجاد نمی‌کند.
+         */
+        registerPlugin(LocalAIPlugin.class);
+
         initializeTextToSpeech();
 
         voicePackManager =
@@ -67,6 +82,10 @@ public class MainActivity extends BridgeActivity {
 
         initializeSpeechRecognizer();
     }
+
+    // ============================================================
+    // Text To Speech
+    // ============================================================
 
     private void initializeTextToSpeech() {
 
@@ -133,6 +152,10 @@ public class MainActivity extends BridgeActivity {
             }
         );
     }
+
+    // ============================================================
+    // Speech Recognizer
+    // ============================================================
 
     private void initializeSpeechRecognizer() {
 
@@ -223,6 +246,10 @@ public class MainActivity extends BridgeActivity {
             }
         );
     }
+
+    // ============================================================
+    // TTS Internal
+    // ============================================================
 
     private void speakInternal(
         SpeakRequest request
@@ -326,6 +353,10 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
+    // ============================================================
+    // Locale
+    // ============================================================
+
     private Locale localeFor(
         String language
     ) {
@@ -381,6 +412,7 @@ public class MainActivity extends BridgeActivity {
             language != null &&
             language.startsWith("ar")
         ) {
+
             return new Locale("ar");
         }
 
@@ -388,6 +420,7 @@ public class MainActivity extends BridgeActivity {
             language != null &&
             language.startsWith("fa")
         ) {
+
             return new Locale(
                 "fa",
                 "IR"
@@ -396,6 +429,10 @@ public class MainActivity extends BridgeActivity {
 
         return Locale.US;
     }
+
+    // ============================================================
+    // JavaScript callbacks - TTS
+    // ============================================================
 
     private void notifyJavascriptStarted(
         String requestId
@@ -481,6 +518,10 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
+    // ============================================================
+    // JavaScript callbacks - Speech
+    // ============================================================
+
     private void notifyJavascriptSpeechResult(
         String text
     ) {
@@ -535,6 +576,10 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
+    // ============================================================
+    // Speak Request
+    // ============================================================
+
     private static class SpeakRequest {
 
         final String text;
@@ -559,6 +604,10 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    // ============================================================
+    // TTS JavaScript Bridge
+    // ============================================================
+
     private class LinguaTtsBridge {
 
         @JavascriptInterface
@@ -572,6 +621,7 @@ public class MainActivity extends BridgeActivity {
 
             SpeakRequest request =
                 new SpeakRequest(
+
                     text == null
                         ? ""
                         : text,
@@ -680,6 +730,10 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    // ============================================================
+    // Speech JavaScript Bridge
+    // ============================================================
+
     private class LinguaSpeechBridge {
 
         @JavascriptInterface
@@ -719,6 +773,7 @@ public class MainActivity extends BridgeActivity {
                 if (
                     speechRecognizer != null
                 ) {
+
                     speechRecognizer.cancel();
                 }
             });
@@ -730,6 +785,10 @@ public class MainActivity extends BridgeActivity {
             return speechRecognizer != null;
         }
     }
+
+    // ============================================================
+    // Native Speech Recognition
+    // ============================================================
 
     private void startNativeRecognition() {
 
@@ -782,6 +841,10 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
+    // ============================================================
+    // Permissions
+    // ============================================================
+
     @Override
     public void onRequestPermissionsResult(
         int requestCode,
@@ -815,6 +878,10 @@ public class MainActivity extends BridgeActivity {
             );
         }
     }
+
+    // ============================================================
+    // Destroy
+    // ============================================================
 
     @Override
     public void onDestroy() {
