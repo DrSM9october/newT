@@ -43,27 +43,59 @@ public class LocalAIPlugin extends Plugin {
                 return;
             }
 
-            result.put("engineReady", aiManager.isEngineReady());
-            result.put("modelLoaded", aiManager.isModelLoaded());
+            result.put(
+                    "engineReady",
+                    aiManager.isEngineReady()
+            );
 
-            String loadedModelId = aiManager.getLoadedModelId();
+            result.put(
+                    "modelLoaded",
+                    aiManager.isModelLoaded()
+            );
+
+            String loadedModelId =
+                    aiManager.getLoadedModelId();
 
             if (loadedModelId == null) {
-                result.put("loadedModelId", JSObject.NULL);
+                result.put(
+                        "loadedModelId",
+                        JSObject.NULL
+                );
             } else {
-                result.put("loadedModelId", loadedModelId);
+                result.put(
+                        "loadedModelId",
+                        loadedModelId
+                );
             }
+
+            /*
+             * getInstalledModels() returns String[].
+             *
+             * Java arrays use .length, not .length().
+             */
+            String[] installedModels =
+                    aiManager.getInstalledModels();
 
             result.put(
                     "modelsInstalled",
-                    aiManager.getInstalledModels().length()
+                    installedModels != null
+                            ? installedModels.length
+                            : 0
             );
 
             call.resolve(result);
 
         } catch (Exception e) {
+
+            android.util.Log.e(
+                    "LocalAIPlugin",
+                    "Failed to get LocalAI status",
+                    e
+            );
+
             call.reject(
-                    "Failed to get LocalAI status: " + e.getMessage()
+                    "Failed to get LocalAI status: "
+                            + e.getMessage()
             );
         }
     }
