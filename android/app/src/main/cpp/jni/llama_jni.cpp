@@ -1,609 +1,790 @@
-package com.linguaai.persian.plugins;
+#include <jni.h>
 
-import android.content.Context;
-import android.util.Log;
+#include <algorithm>
+#include <cstdint>
+#include <mutex>
+#include <string>
+#include <vector>
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
+#include "llama.h"
+
+namespace {
+
+std::mutex g_backend_mutex;
+bool g_backend_initialized = false;
 
 /**
- * Manager for the local llama.cpp AI engine.
+ * Initialize the llama.cpp backend exactly once while it is active.
  *
- * Java layer:
- *   LocalAIManager
- *
- * Native layer:
- *   llama_jni.cpp
+ * We intentionally do not use std::once_flag here because
+ * llama_backend_free() can be called during shutdown and the
+ * backend may need to be initialized again later.
  */
-public class LocalAIManager {
+bool ensure_backend() {
+    std::lock_guard<std::mutex> lock(g_backend_mutex);
 
-    private static final String TAG = "LinguaAI-LocalAI";
-
-    private static final int DEFAULT_MAX_TOKENS = 128;
-    private static final float DEFAULT_TEMPERATURE = 0.7f;
-    private static final float DEFAULT_TOP_P = 0.9f;
-
-    private final Context context;
-
-    /**
-     * Native engine state.
-     */
-    private boolean engineReady = false;
-
-    /**
-     * Native model pointer returned by nativeLoadModel().
-     */
-    private long nativeModelPtr = 0L;
-
-    /**
-     * Logical ID/path of the currently loaded model.
-     */
-    private String loadedModelId = null;
-
-    /**
-     * Prevent double native loading/freeing.
-     */
-    private boolean nativeLibraryLoaded = false;
-
-    public LocalAIManager(Context context) {
-        this.context = context.getApplicationContext();
-        loadNativeLibrary();
+    if (g_backend_initialized) {
+        return true;
     }
 
-    // ============================================================
-    // Native library
-    // ============================================================
+    try {
+        llama_backend_init();
+        g_backend_initialized = true;
+        return true;
+    } catch (...) {
+        g_backend_initialized = false;
+        return false;
+    }
+}
 
-    private synchronized void loadNativeLibrary() {
+/**
+ * Release the llama.cpp backend.
+ */
+void free_backend() {
+    std::lock_guard<std::mutex> lock(g_backend_mutex);
 
-        if (nativeLibraryLoaded) {
-            return;
-        }
-
-        try {
-
-            System.loadLibrary("linguaai_localai");
-
-            nativeLibraryLoaded = true;
-
-            Log.d(
-                    TAG,
-                    "Native library loaded successfully"
-            );
-
-        } catch (UnsatisfiedLinkError e) {
-
-            nativeLibraryLoaded = false;
-
-            Log.e(
-                    TAG,
-                    "Failed to load linguaai_localai",
-                    e
-            );
-        }
+    if (!g_backend_initialized) {
+        return;
     }
 
-    // ============================================================
-    // Native methods
-    // ============================================================
+    try {
+        llama_backend_free();
+    } catch (...) {
+        // Never allow native shutdown to escape through JNI.
+    }
 
-    private native boolean nativeInitEngine();
+    g_backend_initialized = false;
+}
 
-    private native long nativeLoadModel(
-            String modelPath
+/**
+ * Convert a Java String to UTF-8 std::string.
+ */
+bool jstring_to_string(
+        JNIEnv * env,
+        jstring value,
+        std::string & output) {
+
+    output.clear();
+
+    if (env == nullptr || value == nullptr) {
+        return false;
+    }
+
+    const char * chars =
+            env->GetStringUTFChars(
+                    value,
+                    nullptr
+            );
+
+    if (chars == nullptr) {
+        return false;
+    }
+
+    output.assign(chars);
+
+    env->ReleaseStringUTFChars(
+            value,
+            chars
     );
 
-    private native String nativeRunInference(
-            long modelPtr,
-            String prompt,
-            int maxTokens,
-            float temperature,
-            float topP
-    );
+    return true;
+}
 
-    private native void nativeUnloadModel(
-            long modelPtr
-    );
+/**
+ * Tokenize a prompt.
+ *
+ * llama_tokenize() returns the required token count as
+ * a negative value when the supplied buffer is too small.
+ */
+std::vector<llama_token> tokenize(
+        const llama_vocab * vocab,
+        const std::string & text,
+        bool add_bos) {
 
-    private native void nativeFreeEngine();
-
-    // ============================================================
-    // Engine
-    // ============================================================
-
-    /**
-     * Initialize llama.cpp backend.
-     */
-    public synchronized boolean initializeEngine() {
-
-        if (engineReady) {
-
-            Log.d(
-                    TAG,
-                    "Engine already initialized"
-            );
-
-            return true;
-        }
-
-        if (!nativeLibraryLoaded) {
-
-            Log.e(
-                    TAG,
-                    "Native library is not loaded"
-            );
-
-            return false;
-        }
-
-        try {
-
-            engineReady = nativeInitEngine();
-
-            Log.d(
-                    TAG,
-                    "Engine initialization result: "
-                            + engineReady
-            );
-
-            return engineReady;
-
-        } catch (Throwable e) {
-
-            engineReady = false;
-
-            Log.e(
-                    TAG,
-                    "Engine initialization failed",
-                    e
-            );
-
-            return false;
-        }
+    if (vocab == nullptr) {
+        return {};
     }
 
-    /**
-     * Alias for code that expects initEngine().
-     */
-    public synchronized boolean initEngine() {
-        return initializeEngine();
-    }
+    const int32_t text_length =
+            static_cast<int32_t>(text.size());
 
-    /**
-     * Returns whether the native llama.cpp engine is ready.
-     *
-     * This method is required by LocalAIPlugin.java.
-     */
-    public synchronized boolean isEngineReady() {
-        return engineReady;
-    }
-
-    // ============================================================
-    // Model
-    // ============================================================
-
-    /**
-     * Load a GGUF model.
-     *
-     * @param modelPath absolute path to GGUF file
-     * @return true when successfully loaded
-     */
-    public synchronized boolean loadModel(
-            String modelPath
-    ) {
-
-        if (modelPath == null ||
-                modelPath.trim().isEmpty()) {
-
-            Log.e(
-                    TAG,
-                    "loadModel: empty model path"
+    int32_t required =
+            llama_tokenize(
+                    vocab,
+                    text.c_str(),
+                    text_length,
+                    nullptr,
+                    0,
+                    add_bos,
+                    true
             );
 
-            return false;
+    if (required >= 0) {
+
+        if (required == 0) {
+            return {};
         }
 
-        if (!engineReady) {
+        std::vector<llama_token> tokens(
+                static_cast<size_t>(required)
+        );
 
-            Log.d(
-                    TAG,
-                    "Engine is not ready. Initializing..."
-            );
-
-            if (!initializeEngine()) {
-                return false;
-            }
-        }
-
-        File modelFile = new File(modelPath);
-
-        if (!modelFile.exists()) {
-
-            Log.e(
-                    TAG,
-                    "Model does not exist: "
-                            + modelPath
-            );
-
-            return false;
-        }
-
-        if (!modelFile.isFile()) {
-
-            Log.e(
-                    TAG,
-                    "Model path is not a file: "
-                            + modelPath
-            );
-
-            return false;
-        }
-
-        /*
-         * اگر مدل دیگری load شده، ابتدا آزادش می‌کنیم.
-         */
-        if (nativeModelPtr != 0L) {
-            unloadModel();
-        }
-
-        try {
-
-            Log.d(
-                    TAG,
-                    "Loading model: "
-                            + modelPath
-            );
-
-            long ptr = nativeLoadModel(
-                    modelPath
-            );
-
-            if (ptr == 0L) {
-
-                Log.e(
-                        TAG,
-                        "nativeLoadModel returned 0"
+        const int32_t actual =
+                llama_tokenize(
+                        vocab,
+                        text.c_str(),
+                        text_length,
+                        tokens.data(),
+                        required,
+                        add_bos,
+                        true
                 );
 
-                nativeModelPtr = 0L;
-                loadedModelId = null;
-
-                return false;
-            }
-
-            nativeModelPtr = ptr;
-
-            loadedModelId =
-                    modelFile.getAbsolutePath();
-
-            Log.d(
-                    TAG,
-                    "Model loaded successfully: "
-                            + loadedModelId
-            );
-
-            return true;
-
-        } catch (Throwable e) {
-
-            nativeModelPtr = 0L;
-            loadedModelId = null;
-
-            Log.e(
-                    TAG,
-                    "Model loading failed",
-                    e
-            );
-
-            return false;
-        }
-    }
-
-    /**
-     * Returns the currently loaded model ID/path.
-     *
-     * This method is required by LocalAIPlugin.java.
-     */
-    public synchronized String getLoadedModelId() {
-        return loadedModelId;
-    }
-
-    /**
-     * Returns whether a native model is currently loaded.
-     */
-    public synchronized boolean isModelLoaded() {
-
-        return nativeModelPtr != 0L &&
-                loadedModelId != null;
-    }
-
-    /**
-     * Unload current model.
-     */
-    public synchronized void unloadModel() {
-
-        if (nativeModelPtr == 0L) {
-
-            loadedModelId = null;
-
-            return;
+        if (actual < 0) {
+            return {};
         }
 
-        try {
+        tokens.resize(
+                static_cast<size_t>(actual)
+        );
 
-            Log.d(
-                    TAG,
-                    "Unloading model: "
-                            + loadedModelId
-            );
-
-            nativeUnloadModel(
-                    nativeModelPtr
-            );
-
-        } catch (Throwable e) {
-
-            Log.e(
-                    TAG,
-                    "Error unloading model",
-                    e
-            );
-
-        } finally {
-
-            nativeModelPtr = 0L;
-            loadedModelId = null;
-        }
+        return tokens;
     }
 
-    // ============================================================
-    // Inference
-    // ============================================================
+    const int32_t token_count =
+            -required;
 
-    /**
-     * Run inference using default parameters.
+    if (token_count <= 0) {
+        return {};
+    }
+
+    std::vector<llama_token> tokens(
+            static_cast<size_t>(token_count)
+    );
+
+    const int32_t actual =
+            llama_tokenize(
+                    vocab,
+                    text.c_str(),
+                    text_length,
+                    tokens.data(),
+                    token_count,
+                    add_bos,
+                    true
+            );
+
+    if (actual < 0) {
+        return {};
+    }
+
+    tokens.resize(
+            static_cast<size_t>(actual)
+    );
+
+    return tokens;
+}
+
+/**
+ * Convert one llama token to its UTF-8 text piece.
+ */
+std::string token_to_piece(
+        const llama_vocab * vocab,
+        llama_token token) {
+
+    if (vocab == nullptr) {
+        return {};
+    }
+
+    std::vector<char> buffer(128);
+
+    int32_t size =
+            llama_token_to_piece(
+                    vocab,
+                    token,
+                    buffer.data(),
+                    static_cast<int32_t>(buffer.size()),
+                    0,
+                    true
+            );
+
+    if (size < 0) {
+
+        const int32_t required =
+                -size;
+
+        if (required <= 0) {
+            return {};
+        }
+
+        buffer.resize(
+                static_cast<size_t>(required)
+        );
+
+        size =
+                llama_token_to_piece(
+                        vocab,
+                        token,
+                        buffer.data(),
+                        required,
+                        0,
+                        true
+                );
+    }
+
+    if (size <= 0) {
+        return {};
+    }
+
+    return std::string(
+            buffer.data(),
+            static_cast<size_t>(size)
+    );
+}
+
+/**
+ * Create a Java String safely.
+ */
+jstring make_java_string(
+        JNIEnv * env,
+        const std::string & value) {
+
+    if (env == nullptr) {
+        return nullptr;
+    }
+
+    return env->NewStringUTF(
+            value.c_str()
+    );
+}
+
+} // namespace
+
+
+// ============================================================
+// Engine initialization
+// ============================================================
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_linguaai_persian_plugins_LocalAIManager_nativeInitEngine(
+        JNIEnv *,
+        jobject) {
+
+    return ensure_backend()
+            ? JNI_TRUE
+            : JNI_FALSE;
+}
+
+
+// ============================================================
+// Model loading
+// ============================================================
+
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_com_linguaai_persian_plugins_LocalAIManager_nativeLoadModel(
+        JNIEnv * env,
+        jobject,
+        jstring modelPath) {
+
+    if (env == nullptr || modelPath == nullptr) {
+        return 0L;
+    }
+
+    if (!ensure_backend()) {
+        return 0L;
+    }
+
+    std::string path;
+
+    if (!jstring_to_string(
+            env,
+            modelPath,
+            path)) {
+
+        return 0L;
+    }
+
+    if (path.empty()) {
+        return 0L;
+    }
+
+    try {
+
+        llama_model_params modelParams =
+                llama_model_default_params();
+
+        /*
+         * CPU-only configuration.
+         *
+         * CMake also disables GPU backends for the current
+         * Android MVP.
+         */
+        modelParams.n_gpu_layers = 0;
+
+        llama_model * model =
+                llama_model_load_from_file(
+                        path.c_str(),
+                        modelParams
+                );
+
+        if (model == nullptr) {
+            return 0L;
+        }
+
+        return reinterpret_cast<jlong>(
+                model
+        );
+
+    } catch (...) {
+
+        return 0L;
+    }
+}
+
+
+// ============================================================
+// Inference
+// ============================================================
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_linguaai_persian_plugins_LocalAIManager_nativeRunInference(
+        JNIEnv * env,
+        jobject,
+        jlong modelPtr,
+        jstring prompt,
+        jint maxTokens,
+        jfloat temperature,
+        jfloat topP) {
+
+    if (env == nullptr) {
+        return nullptr;
+    }
+
+    if (modelPtr == 0L) {
+        return make_java_string(
+                env,
+                "Error: invalid model pointer"
+        );
+    }
+
+    if (prompt == nullptr) {
+        return make_java_string(
+                env,
+                "Error: empty prompt"
+        );
+    }
+
+    /*
+     * Keep backend alive for the entire inference operation.
      */
-    public synchronized String runInference(
-            String prompt
-    ) {
+    if (!ensure_backend()) {
+        return make_java_string(
+                env,
+                "Error: llama backend is not initialized"
+        );
+    }
 
-        return runInference(
+    try {
+
+        auto * model =
+                reinterpret_cast<llama_model *>(
+                        modelPtr
+                );
+
+        if (model == nullptr) {
+            return make_java_string(
+                    env,
+                    "Error: invalid model"
+            );
+        }
+
+        std::string promptText;
+
+        if (!jstring_to_string(
+                env,
                 prompt,
-                DEFAULT_MAX_TOKENS,
-                DEFAULT_TEMPERATURE,
-                DEFAULT_TOP_P
-        );
-    }
+                promptText)) {
 
-    /**
-     * Run inference using custom parameters.
-     */
-    public synchronized String runInference(
-            String prompt,
-            int maxTokens,
-            float temperature,
-            float topP
-    ) {
-
-        if (prompt == null ||
-                prompt.trim().isEmpty()) {
-
-            return "Error: empty prompt";
-        }
-
-        if (!engineReady) {
-
-            return "Error: engine is not initialized";
-        }
-
-        if (nativeModelPtr == 0L) {
-
-            return "Error: no model loaded";
-        }
-
-        try {
-
-            String result = nativeRunInference(
-                    nativeModelPtr,
-                    prompt,
-                    maxTokens,
-                    temperature,
-                    topP
+            return make_java_string(
+                    env,
+                    "Error: unable to read prompt"
             );
-
-            if (result == null) {
-
-                return "Error: native inference returned null";
-            }
-
-            return result;
-
-        } catch (Throwable e) {
-
-            Log.e(
-                    TAG,
-                    "Inference failed",
-                    e
-            );
-
-            return "Error: "
-                    + e.getMessage();
         }
-    }
 
-    // ============================================================
-    // Installed models
-    // ============================================================
+        if (promptText.empty()) {
+            return make_java_string(
+                    env,
+                    "Error: empty prompt"
+            );
+        }
 
-    /**
-     * Returns installed GGUF models.
-     *
-     * This method is required by LocalAIPlugin.java.
-     *
-     * The result is a JSON-like array of absolute file paths
-     * represented as a Java String[].
-     */
-    public synchronized String[] getInstalledModels() {
-
-        List<String> models =
-                new ArrayList<>();
-
-        /*
-         * Search locations:
-         *
-         * 1. app files/models
-         * 2. app external files/models
-         *
-         * We intentionally don't scan the entire device.
-         */
-
-        File internalModelsDir =
-                new File(
-                        context.getFilesDir(),
-                        "models"
+        const llama_vocab * vocab =
+                llama_model_get_vocab(
+                        model
                 );
 
-        addGgufFiles(
-                internalModelsDir,
-                models
+        if (vocab == nullptr) {
+            return make_java_string(
+                    env,
+                    "Error: model vocabulary is unavailable"
+            );
+        }
+
+        /*
+         * Limit generation to a sane Android-side range.
+         */
+        const int32_t n_predict =
+                std::max(
+                        1,
+                        std::min(
+                                static_cast<int32_t>(maxTokens),
+                                static_cast<int32_t>(1024)
+                        )
+                );
+
+        std::vector<llama_token> promptTokens =
+                tokenize(
+                        vocab,
+                        promptText,
+                        true
+                );
+
+        if (promptTokens.empty()) {
+            return make_java_string(
+                    env,
+                    "Error: prompt tokenization failed"
+            );
+        }
+
+        /*
+         * Context size must contain both the prompt and
+         * the requested generated tokens.
+         *
+         * Keep the Android MVP bounded to 2048 tokens.
+         */
+        const uint32_t requestedContext =
+                static_cast<uint32_t>(
+                        promptTokens.size()
+                )
+                +
+                static_cast<uint32_t>(
+                        n_predict
+                )
+                +
+                8U;
+
+        const uint32_t contextSize =
+                std::max(
+                        32U,
+                        std::min(
+                                2048U,
+                                requestedContext
+                        )
+                );
+
+        /*
+         * If the prompt itself is larger than the context,
+         * fail cleanly instead of allowing an invalid decode.
+         */
+        if (promptTokens.size() >= contextSize) {
+
+            return make_java_string(
+                    env,
+                    "Error: prompt is too long for context"
+            );
+        }
+
+        llama_context_params contextParams =
+                llama_context_default_params();
+
+        contextParams.n_ctx =
+                contextSize;
+
+        /*
+         * Keep batch size bounded for Android memory usage.
+         */
+        contextParams.n_batch =
+                std::min(
+                        512U,
+                        contextSize
+                );
+
+        contextParams.n_ubatch =
+                std::min(
+                        contextParams.n_ubatch,
+                        contextParams.n_batch
+                );
+
+        /*
+         * CPU threading.
+         *
+         * llama.cpp will use these values for prompt processing
+         * and generation.
+         */
+        contextParams.n_threads = 4;
+        contextParams.n_threads_batch = 4;
+
+        llama_context * ctx =
+                llama_init_from_model(
+                        model,
+                        contextParams
+                );
+
+        if (ctx == nullptr) {
+
+            return make_java_string(
+                    env,
+                    "Error: failed to create llama context"
+            );
+        }
+
+        /*
+         * Sampler chain.
+         */
+        llama_sampler_chain_params samplerParams =
+                llama_sampler_chain_default_params();
+
+        llama_sampler * sampler =
+                llama_sampler_chain_init(
+                        samplerParams
+                );
+
+        if (sampler == nullptr) {
+
+            llama_free(ctx);
+
+            return make_java_string(
+                    env,
+                    "Error: failed to create sampler"
+            );
+        }
+
+        /*
+         * Sanitize user parameters.
+         */
+        const float safeTemperature =
+                std::max(
+                        0.0f,
+                        std::min(
+                                2.0f,
+                                static_cast<float>(temperature)
+                        )
+                );
+
+        const float safeTopP =
+                std::max(
+                        0.01f,
+                        std::min(
+                                1.0f,
+                                static_cast<float>(topP)
+                        )
+                );
+
+        /*
+         * Deterministic generation when temperature is zero.
+         */
+        if (safeTemperature <= 0.001f) {
+
+            llama_sampler_chain_add(
+                    sampler,
+                    llama_sampler_init_greedy()
+            );
+
+        } else {
+
+            llama_sampler_chain_add(
+                    sampler,
+                    llama_sampler_init_top_k(40)
+            );
+
+            llama_sampler_chain_add(
+                    sampler,
+                    llama_sampler_init_top_p(
+                            safeTopP,
+                            1
+                    )
+            );
+
+            llama_sampler_chain_add(
+                    sampler,
+                    llama_sampler_init_temp(
+                            safeTemperature
+                    )
+            );
+
+            llama_sampler_chain_add(
+                    sampler,
+                    llama_sampler_init_dist(
+                            LLAMA_DEFAULT_SEED
+                    )
+            );
+        }
+
+        /*
+         * Evaluate the complete prompt first.
+         */
+        llama_batch batch =
+                llama_batch_get_one(
+                        promptTokens.data(),
+                        static_cast<int32_t>(
+                                promptTokens.size()
+                        )
+                );
+
+        if (llama_decode(
+                ctx,
+                batch
+        ) != 0) {
+
+            llama_sampler_free(
+                    sampler
+            );
+
+            llama_free(
+                    ctx
+            );
+
+            return make_java_string(
+                    env,
+                    "Error: prompt evaluation failed"
+            );
+        }
+
+        /*
+         * Generate response.
+         */
+        std::string output;
+
+        output.reserve(
+                static_cast<size_t>(
+                        n_predict
+                ) * 4U
         );
 
-        File externalFilesDir =
-                context.getExternalFilesDir(null);
+        for (
+                int32_t generated = 0;
+                generated < n_predict;
+                ++generated) {
 
-        if (externalFilesDir != null) {
-
-            File externalModelsDir =
-                    new File(
-                            externalFilesDir,
-                            "models"
+            const llama_token token =
+                    llama_sampler_sample(
+                            sampler,
+                            ctx,
+                            -1
                     );
 
-            addGgufFiles(
-                    externalModelsDir,
-                    models
+            /*
+             * Stop at end-of-generation token.
+             */
+            if (llama_vocab_is_eog(
+                    vocab,
+                    token
+            )) {
+                break;
+            }
+
+            const std::string piece =
+                    token_to_piece(
+                            vocab,
+                            token
+                    );
+
+            output += piece;
+
+            /*
+             * Feed generated token back into context.
+             */
+            batch =
+                    llama_batch_get_one(
+                            &token,
+                            1
+                    );
+
+            if (llama_decode(
+                    ctx,
+                    batch
+            ) != 0) {
+                break;
+            }
+        }
+
+        /*
+         * Release inference-specific resources.
+         *
+         * The model remains alive and is owned by Java's
+         * nativeModelPtr until nativeUnloadModel().
+         */
+        llama_sampler_free(
+                sampler
+        );
+
+        llama_free(
+                ctx
+        );
+
+        return make_java_string(
+                env,
+                output
+        );
+
+    } catch (...) {
+
+        return make_java_string(
+                env,
+                "Error: native inference exception"
+        );
+    }
+}
+
+
+// ============================================================
+// Model unloading
+// ============================================================
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_linguaai_persian_plugins_LocalAIManager_nativeUnloadModel(
+        JNIEnv *,
+        jobject,
+        jlong modelPtr) {
+
+    if (modelPtr == 0L) {
+        return;
+    }
+
+    try {
+
+        auto * model =
+                reinterpret_cast<llama_model *>(
+                        modelPtr
+                );
+
+        if (model != nullptr) {
+            llama_model_free(
+                    model
             );
         }
 
-        /*
-         * اگر مدل فعلی در لیست نبود، آن را اضافه کن.
-         *
-         * این کار باعث می‌شود Plugin بتواند مدلی را که
-         * از مسیر دیگری load شده نیز ببیند.
-         */
-        if (loadedModelId != null &&
-                !models.contains(loadedModelId)) {
-
-            File loadedFile =
-                    new File(
-                            loadedModelId
-                    );
-
-            if (loadedFile.exists() &&
-                    loadedFile.isFile()) {
-
-                models.add(
-                        loadedFile.getAbsolutePath()
-                );
-            }
-        }
-
-        return models.toArray(
-                new String[0]
-        );
-    }
-
-    /**
-     * Add GGUF files from a directory.
-     */
-    private void addGgufFiles(
-            File directory,
-            List<String> result
-    ) {
-
-        if (directory == null ||
-                result == null) {
-
-            return;
-        }
-
-        if (!directory.exists() ||
-                !directory.isDirectory()) {
-
-            return;
-        }
-
-        File[] files =
-                directory.listFiles();
-
-        if (files == null) {
-            return;
-        }
-
-        for (File file : files) {
-
-            if (file == null ||
-                    !file.isFile()) {
-
-                continue;
-            }
-
-            String name =
-                    file.getName()
-                            .toLowerCase();
-
-            if (name.endsWith(".gguf")) {
-
-                result.add(
-                        file.getAbsolutePath()
-                );
-            }
-        }
-    }
-
-    // ============================================================
-    // Shutdown
-    // ============================================================
-
-    /**
-     * Release model and llama.cpp backend.
-     */
-    public synchronized void release() {
-
-        Log.d(
-                TAG,
-                "Releasing LocalAIManager"
-        );
+    } catch (...) {
 
         /*
-         * مدل باید قبل از backend آزاد شود.
+         * Never throw a C++ exception through JNI.
          */
-        unloadModel();
-
-        if (engineReady) {
-
-            try {
-
-                nativeFreeEngine();
-
-            } catch (Throwable e) {
-
-                Log.e(
-                        TAG,
-                        "Error freeing native engine",
-                        e
-                );
-            }
-        }
-
-        engineReady = false;
     }
+}
 
-    /**
-     * Alias for code that expects shutdown().
-     */
-    public synchronized void shutdown() {
-        release();
-    }
+
+// ============================================================
+// Backend shutdown
+// ============================================================
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_linguaai_persian_plugins_LocalAIManager_nativeFreeEngine(
+        JNIEnv *,
+        jobject) {
+
+    free_backend();
 }
